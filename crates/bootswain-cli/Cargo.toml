@@ -1,0 +1,23 @@
+[package]
+name = "bootswain-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+
+[[bin]]
+name = "bootswain"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+bootswain-flash = { path = "../bootswain-flash" }
+bootswain-probe = { path = "../bootswain-probe" }
+clap.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
