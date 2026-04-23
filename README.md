@@ -22,10 +22,11 @@ The first probe flow matches the investigation protocol already used in
 Tow-Boot:
 
 1. wait for the U-Boot prompt
-2. run `usb tree`
-3. run `usb reset`
-4. run `usb tree`
-5. write raw logs plus machine-readable JSON results
+2. run `usb start`
+3. run `usb tree`
+4. run `usb reset`
+5. run `usb tree`
+6. write raw logs plus machine-readable JSON results
 
 ## ROCKPro64 UART caveat
 
@@ -46,12 +47,30 @@ Inspect an image:
 bootswain image inspect --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img
 ```
 
+Inspect an image with JSON output:
+
+```sh
+bootswain image inspect \
+  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
+  --json
+```
+
 Flash an SD card:
 
 ```sh
 bootswain flash sd \
   --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
   --device /dev/sdb
+```
+
+Validate a flash target without writing:
+
+```sh
+bootswain flash sd \
+  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
+  --device /dev/sdb \
+  --dry-run \
+  --json
 ```
 
 Run one ROCKPro64 USB probe trial:
@@ -73,6 +92,17 @@ bootswain probe rockpro64-usb \
   --out ./probe-output
 ```
 
+Adjust probe timeouts and emit JSON to stdout:
+
+```sh
+bootswain probe rockpro64-usb \
+  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
+  --port /dev/ttyUSB0 \
+  --prompt-timeout-secs 30 \
+  --command-timeout-secs 15 \
+  --json
+```
+
 ## Output
 
 Each probe run writes:
@@ -80,7 +110,16 @@ Each probe run writes:
 - `summary.json` in the requested output directory
 - `trial.json` plus `serial.log` under `trial-N/` for each trial
 
-The JSON output is the current public machine-readable interface for V1.
+`trial.json` includes stage-level results for:
+
+- autoboot
+- `usb start`
+- `usb tree`
+- `usb reset`
+- failure stage classification
+
+The JSON files and `--json` output are the current public machine-readable
+interface.
 
 ## Development
 
@@ -99,4 +138,3 @@ CI runs:
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
 - `nix flake check`
-

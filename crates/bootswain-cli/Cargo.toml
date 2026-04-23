@@ -13,11 +13,16 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+bootswain-core = { path = "../bootswain-core" }
 bootswain-flash = { path = "../bootswain-flash" }
 bootswain-probe = { path = "../bootswain-probe" }
 clap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile.workspace = true
 
 [lints]
 workspace = true
-

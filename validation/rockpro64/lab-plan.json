@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "board": "rock-pro64",
+  "release": "2026.04-rockpro64-lab.0",
+  "executor": "rockpro64-serial",
+  "qemu": null,
+  "scenarios": [
+    {
+      "name": "spi-installer-menu",
+      "kind": "boot-menu",
+      "target": "sd",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-installer",
+      "steps": [
+        {
+          "name": "boot installer menu",
+          "command": null,
+          "expect": [
+            "ROCKPro64",
+            "Flash SPI"
+          ],
+          "timeout_secs": 30
+        }
+      ]
+    },
+    {
+      "name": "spi-install",
+      "kind": "spi-install",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-installer",
+      "steps": [
+        {
+          "name": "flash firmware to spi",
+          "command": "run bootswain_flash_spi",
+          "expect": [
+            "SPI flash complete"
+          ],
+          "timeout_secs": 120
+        }
+      ]
+    },
+    {
+      "name": "spi-reinstall",
+      "kind": "spi-install",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-installer",
+      "steps": [
+        {
+          "name": "flash firmware to spi again",
+          "command": "run bootswain_flash_spi",
+          "expect": [
+            "SPI flash complete"
+          ],
+          "timeout_secs": 120
+        }
+      ]
+    },
+    {
+      "name": "spi-erase",
+      "kind": "spi-erase",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-installer",
+      "steps": [
+        {
+          "name": "erase entire spi flash",
+          "command": "run bootswain_erase_spi",
+          "expect": [
+            "SPI erase complete"
+          ],
+          "timeout_secs": 120
+        }
+      ]
+    },
+    {
+      "name": "spi-post-install-prompt",
+      "kind": "prompt",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot firmware from spi",
+          "command": null,
+          "expect": [
+            "=> "
+          ],
+          "timeout_secs": 30
+        }
+      ]
+    },
+    {
+      "name": "sd-uefi-boot",
+      "kind": "uefi-boot",
+      "target": "sd",
+      "protocol": "uefi",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot uefi installer from sd",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "sd-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "sd",
+      "protocol": "extlinux",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot extlinux image from sd",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "emmc-uefi-boot",
+      "kind": "uefi-boot",
+      "target": "emmc",
+      "protocol": "uefi",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot uefi installer from emmc",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "emmc-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "emmc",
+      "protocol": "extlinux",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot extlinux image from emmc",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "usb-uefi-boot",
+      "kind": "uefi-boot",
+      "target": "usb",
+      "protocol": "uefi",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot uefi installer from usb",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "usb-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "usb",
+      "protocol": "extlinux",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot extlinux image from usb",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "nvme-uefi-boot",
+      "kind": "uefi-boot",
+      "target": "nvme",
+      "protocol": "uefi",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot uefi installer from nvme",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "nvme-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "nvme",
+      "protocol": "extlinux",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "boot extlinux image from nvme",
+          "command": "bootflow scan",
+          "expect": [
+            "Booting"
+          ],
+          "timeout_secs": 90
+        }
+      ]
+    },
+    {
+      "name": "no-bootable-media-ui",
+      "kind": "boot-menu",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "show useful no-media state",
+          "command": "bootflow scan",
+          "expect": [
+            "No bootable media"
+          ],
+          "timeout_secs": 30
+        }
+      ]
+    },
+    {
+      "name": "recovery-console",
+      "kind": "prompt",
+      "target": "spi",
+      "protocol": "u-boot-shell",
+      "artifact": "spi-firmware",
+      "steps": [
+        {
+          "name": "drop to u-boot shell",
+          "command": null,
+          "expect": [
+            "=> "
+          ],
+          "timeout_secs": 30
+        }
+      ]
+    }
+  ]
+}

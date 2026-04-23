@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "board": "generic-arm64-qemu",
+  "release": "qemu-arm64-boot-smoke.0",
+  "executor": "qemu-arm64",
+  "qemu": {
+    "machine": "virt",
+    "cpu": "cortex-a57",
+    "qemu_args": [
+      "-machine",
+      "virt",
+      "-cpu",
+      "cortex-a57",
+      "-nographic"
+    ],
+    "timeout_secs": 8
+  },
+  "scenarios": [
+    {
+      "name": "generic-u-boot-prompt",
+      "kind": "prompt",
+      "target": "virtio",
+      "protocol": "u-boot-shell",
+      "artifact": null,
+      "steps": [
+        {
+          "name": "wait for prompt",
+          "command": null,
+          "expect": [
+            "=> "
+          ],
+          "timeout_secs": 8
+        }
+      ]
+    }
+  ]
+}

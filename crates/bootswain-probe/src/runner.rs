@@ -1,9 +1,10 @@
 use crate::parser::{
     classify_autoboot, extract_last_usb_tree_summary, segment_has_prompt, segment_has_reset,
 };
+use crate::profile::{ProbeProfile, ProbeResultField, rockpro64_usb_profile};
 use crate::serial::{RealSerial, SerialIo};
 use anyhow::{Context, Result, bail};
-use bootswain_core::{Board, ImageInfo, ProbeStepResult, SummaryResult, TrialResult};
+use bootswain_core::{FailureStage, ImageInfo, ProbeStepResult, SummaryResult, TrialResult};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -20,6 +21,8 @@ pub struct ProbeConfig {
     pub prompt_timeout: Duration,
     pub command_timeout: Duration,
     pub idle_sleep: Duration,
+    pub progress_to_stderr: bool,
+    profile: ProbeProfile,
 }
 
 impl ProbeConfig {
@@ -34,6 +37,8 @@ impl ProbeConfig {
             prompt_timeout: Duration::from_secs(20),
             command_timeout: Duration::from_secs(10),
             idle_sleep: Duration::from_millis(20),
+            progress_to_stderr: false,
+            profile: rockpro64_usb_profile(),
         }
     }
 }
@@ -59,14 +64,17 @@ pub fn run_rockpro64_usb_probe(config: &ProbeConfig) -> Result<SummaryResult> {
     fs::create_dir_all(&config.out_dir)
         .with_context(|| format!("failed to create {}", config.out_dir.display()))?;
 
-    println!("ROCKPro64 UART caveat:");
-    println!("  - connect only GND + board TX during power-on");
-    println!("  - leave board RX / pin 10 disconnected until U-Boot is already up");
-    println!();
+    progressln(config, "ROCKPro64 UART caveat:");
+    progressln(config, "  - connect only GND + board TX during power-on");
+    progressln(
+        config,
+        "  - leave board RX / pin 10 disconnected until U-Boot is already up",
+    );
+    progressln(config, "");
 
     let mut trials = Vec::with_capacity(config.repeat as usize);
     for trial_number in 1..=config.repeat {
-        prompt_operator(trial_number, config.repeat)?;
+        prompt_operator(config, trial_number, config.repeat)?;
 
         let trial_dir = config.out_dir.join(format!("trial-{trial_number}"));
         fs::create_dir_all(&trial_dir)
@@ -74,10 +82,28 @@ pub fn run_rockpro64_usb_probe(config: &ProbeConfig) -> Result<SummaryResult> {
 
         let mut serial = RealSerial::open(&config.port, config.baud)?;
         let trial = run_trial_with_session(&mut serial, config, trial_number, &trial_dir)?;
+        progressln(
+            config,
+            &format!(
+                "  final: {}",
+                if trial.is_clean() { "clean" } else { "failed" }
+            ),
+        );
+        progressln(config, &format!("  failure-stage: {}", trial.failure_stage));
+        if !trial.final_detected_usb_summary.is_empty() {
+            progressln(
+                config,
+                &format!(
+                    "  detected-usb: {}",
+                    trial.final_detected_usb_summary.replace('\n', " | ")
+                ),
+            );
+        }
+        progressln(config, "");
         trials.push(trial);
     }
 
-    let summary = SummaryResult::from_trials(&config.image, Board::RockPro64, trials);
+    let summary = SummaryResult::from_trials(&config.image, config.profile.board, trials);
     let summary_path = config.out_dir.join("summary.json");
     let summary_json =
         serde_json::to_string_pretty(&summary).context("failed to encode summary")?;
@@ -95,87 +121,105 @@ pub fn run_trial_with_session<T: SerialIo>(
 ) -> Result<TrialResult> {
     let _ = session.clear();
 
+    progressln(config, "  waiting for U-Boot prompt...");
     let mut log = String::new();
     let autoboot =
         read_until_terminator(session, config.prompt_timeout, config.idle_sleep, &mut log)?;
     let autoboot_result = classify_autoboot(&autoboot);
     let autoboot_terminated = classify_termination(&autoboot);
+    progressln(
+        config,
+        &format!("  autoboot: {}", format_autoboot(autoboot_result)),
+    );
 
-    let mut usb_tree_result = ProbeStepResult::NotRun;
-    let mut usb_reset_result = ProbeStepResult::NotRun;
-    let mut final_detected_usb_summary = String::new();
-
-    if autoboot_terminated == SegmentTermination::Prompt {
-        let first_tree = run_command(
-            session,
-            "usb tree",
-            config.command_timeout,
-            config.idle_sleep,
-            &mut log,
-        )?;
-        usb_tree_result = first_tree.result;
-        if first_tree.result == ProbeStepResult::Ok {
-            final_detected_usb_summary = extract_last_usb_tree_summary(&first_tree.output);
-
-            let usb_reset = run_command(
-                session,
-                "usb reset",
-                config.command_timeout,
-                config.idle_sleep,
-                &mut log,
-            )?;
-            usb_reset_result = usb_reset.result;
-
-            if usb_reset.result == ProbeStepResult::Ok {
-                let final_tree = run_command(
-                    session,
-                    "usb tree",
-                    config.command_timeout,
-                    config.idle_sleep,
-                    &mut log,
-                )?;
-                usb_tree_result = final_tree.result;
-                if final_tree.result == ProbeStepResult::Ok {
-                    let summary = extract_last_usb_tree_summary(&final_tree.output);
-                    if !summary.is_empty() {
-                        final_detected_usb_summary = summary;
-                    }
-                }
-            }
-        }
-    }
-
-    let raw_log_path = trial_dir.join("serial.log");
-    fs::write(&raw_log_path, &log)
-        .with_context(|| format!("failed to write {}", raw_log_path.display()))?;
-
-    let trial = TrialResult {
+    let mut trial = TrialResult {
         image_path: config.image.path.clone(),
         image_sha256: config.image.sha256.clone(),
-        board: Board::RockPro64,
+        board: config.profile.board,
         serial_port: config.port.clone(),
         baud: config.baud,
         trial_number,
         autoboot_result,
-        usb_tree_result,
-        usb_reset_result,
-        final_detected_usb_summary,
-        raw_log_path: raw_log_path.clone(),
+        usb_start_result: ProbeStepResult::NotRun,
+        usb_tree_result: ProbeStepResult::NotRun,
+        usb_reset_result: ProbeStepResult::NotRun,
+        failure_stage: FailureStage::None,
+        final_detected_usb_summary: String::new(),
+        raw_log_path: trial_dir.join("serial.log"),
     };
 
-    let trial_json_path = trial_dir.join("trial.json");
-    let trial_json = serde_json::to_string_pretty(&trial).context("failed to encode trial")?;
-    fs::write(&trial_json_path, trial_json)
-        .with_context(|| format!("failed to write {}", trial_json_path.display()))?;
+    if autoboot_terminated != SegmentTermination::Prompt {
+        trial.failure_stage = FailureStage::Autoboot;
+        progressln(
+            config,
+            &format!(
+                "  autoboot-stage: {}",
+                match autoboot_terminated {
+                    SegmentTermination::Prompt => "prompt",
+                    SegmentTermination::Reset => "reset",
+                    SegmentTermination::Timeout => "timeout",
+                }
+            ),
+        );
+        persist_trial(trial_dir, &log, &trial)?;
+        return Ok(trial);
+    }
 
+    for step in config.profile.steps {
+        progressln(config, &format!("  {}...", step.stage));
+        let outcome = run_command(
+            session,
+            step.command,
+            config.command_timeout,
+            config.idle_sleep,
+            &mut log,
+        )?;
+        set_probe_result(&mut trial, step.result_field, outcome.result);
+
+        if matches!(step.stage, FailureStage::UsbTree1 | FailureStage::UsbTree2)
+            && outcome.result == ProbeStepResult::Ok
+        {
+            let summary = extract_last_usb_tree_summary(&outcome.output);
+            if !summary.is_empty() {
+                trial.final_detected_usb_summary = summary;
+            }
+        }
+
+        progressln(config, &format!("  {}: {}", step.stage, outcome.result));
+        if outcome.result != ProbeStepResult::Ok {
+            trial.failure_stage = step.stage;
+            persist_trial(trial_dir, &log, &trial)?;
+            return Ok(trial);
+        }
+    }
+
+    persist_trial(trial_dir, &log, &trial)?;
     Ok(trial)
 }
 
-fn prompt_operator(trial_number: u32, total_trials: u32) -> Result<()> {
-    println!("Trial {trial_number}/{total_trials}");
-    println!("Press Enter to start capture, then power-cycle the board immediately.");
-    print!("> ");
-    io::stdout().flush().context("failed to flush stdout")?;
+fn prompt_operator(config: &ProbeConfig, trial_number: u32, total_trials: u32) -> Result<()> {
+    progressln(config, &format!("Trial {trial_number}/{total_trials}"));
+    progressln(config, &format!("  image: {}", config.image.path.display()));
+    progressln(
+        config,
+        &format!("  port: {} @ {}", config.port, config.baud),
+    );
+    progressln(
+        config,
+        &format!("  prompt-timeout-secs: {}", config.prompt_timeout.as_secs()),
+    );
+    progressln(
+        config,
+        &format!(
+            "  command-timeout-secs: {}",
+            config.command_timeout.as_secs()
+        ),
+    );
+    progressln(
+        config,
+        "Press Enter to start capture, then power-cycle the board immediately.",
+    );
+    progress_prompt(config, "> ")?;
 
     let mut line = String::new();
     io::stdin()
@@ -183,6 +227,53 @@ fn prompt_operator(trial_number: u32, total_trials: u32) -> Result<()> {
         .context("failed to read operator confirmation")?;
 
     Ok(())
+}
+
+fn progressln(config: &ProbeConfig, message: &str) {
+    if config.progress_to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+}
+
+fn progress_prompt(config: &ProbeConfig, message: &str) -> Result<()> {
+    if config.progress_to_stderr {
+        eprint!("{message}");
+        io::stderr().flush().context("failed to flush stderr")?;
+    } else {
+        print!("{message}");
+        io::stdout().flush().context("failed to flush stdout")?;
+    }
+    Ok(())
+}
+
+fn persist_trial(trial_dir: &Path, log: &str, trial: &TrialResult) -> Result<()> {
+    fs::write(&trial.raw_log_path, log)
+        .with_context(|| format!("failed to write {}", trial.raw_log_path.display()))?;
+
+    let trial_json_path = trial_dir.join("trial.json");
+    let trial_json = serde_json::to_string_pretty(trial).context("failed to encode trial")?;
+    fs::write(&trial_json_path, trial_json)
+        .with_context(|| format!("failed to write {}", trial_json_path.display()))?;
+    Ok(())
+}
+
+fn format_autoboot(result: bootswain_core::AutobootResult) -> &'static str {
+    match result {
+        bootswain_core::AutobootResult::Abort => "abort",
+        bootswain_core::AutobootResult::WarnEnumerate => "warn+enumerate",
+        bootswain_core::AutobootResult::NoDevice => "no-device",
+        bootswain_core::AutobootResult::Other => "other",
+    }
+}
+
+fn set_probe_result(trial: &mut TrialResult, field: ProbeResultField, result: ProbeStepResult) {
+    match field {
+        ProbeResultField::Start => trial.usb_start_result = result,
+        ProbeResultField::Tree => trial.usb_tree_result = result,
+        ProbeResultField::Reset => trial.usb_reset_result = result,
+    }
 }
 
 fn classify_termination(text: &str) -> SegmentTermination {

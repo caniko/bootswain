@@ -1,0 +1,31 @@
+# ROCKPro64 U-Boot fragment
+#
+# This is scaffold only and must be reconciled with upstream U-Boot before any
+# release that claims hardware support.
+
+CONFIG_ARM64=y
+CONFIG_ARCH_ROCKCHIP=y
+CONFIG_ROCKCHIP_RK3399=y
+CONFIG_DEFAULT_DEVICE_TREE="rockchip/rk3399-rockpro64"
+CONFIG_DISTRO_DEFAULTS=y
+CONFIG_BOOTSTD=y
+CONFIG_EFI_LOADER=y
+CONFIG_CMD_BOOTMENU=y
+CONFIG_CMD_DHCP=y
+CONFIG_CMD_PXE=y
+CONFIG_CMD_FS_EXT4=y
+CONFIG_CMD_EXT4_WRITE=y
+CONFIG_CMD_FAT=y
+CONFIG_CMD_GPT=y
+CONFIG_CMD_MMC=y
+CONFIG_CMD_NVME=y
+CONFIG_CMD_PART=y
+CONFIG_CMD_SCSI=y
+CONFIG_CMD_USB=y
+CONFIG_CMD_ENV=y
+
+# Persistent environment is intentionally disabled in this scaffold.
+# If a future release enables it, the offset and redundancy policy must be
+# documented in spi-layout.md and the release notes.
+# CONFIG_ENV_IS_IN_SPI_FLASH is not set
+CONFIG_ENV_IS_NOWHERE=y

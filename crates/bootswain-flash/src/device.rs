@@ -1,5 +1,8 @@
 use anyhow::{Context, Result, bail};
-use bootswain_core::{CompressionKind, ImageInfo};
+use bootswain_core::{
+    BlockDeviceInfo, BlockDeviceKind, CompressionKind, FlashPlan, FlashStrategy,
+    FlashVerificationResult, ImageInfo,
+};
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Write};
@@ -52,22 +55,11 @@ impl DeviceHost for RealDeviceHost {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedBlockDevice {
-    pub original_path: PathBuf,
-    pub canonical_path: PathBuf,
-    pub block_name: String,
+    pub info: BlockDeviceInfo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlashStrategy {
-    RawCopy,
-    ZstdDecompress,
-}
-
-#[derive(Debug, Clone)]
-pub struct FlashPlan {
-    pub image: ImageInfo,
-    pub device: PathBuf,
-    pub strategy: FlashStrategy,
+pub fn inspect_device(device: &Path) -> Result<BlockDeviceInfo> {
+    inspect_device_with(&RealDeviceHost, &LinuxPaths::default(), device)
 }
 
 pub fn validate_target_device(device: &Path) -> Result<ValidatedBlockDevice> {
@@ -79,6 +71,183 @@ pub fn validate_target_device_with<H: DeviceHost>(
     paths: &LinuxPaths,
     device: &Path,
 ) -> Result<ValidatedBlockDevice> {
+    let info = inspect_device_with(host, paths, device)?;
+
+    match info.kind {
+        BlockDeviceKind::Loop
+        | BlockDeviceKind::Ram
+        | BlockDeviceKind::DeviceMapper
+        | BlockDeviceKind::MdRaid => {
+            bail!(
+                "refusing to write to an unsafe virtual block device ({}): {}",
+                info.kind,
+                info.canonical_path.display()
+            );
+        }
+        BlockDeviceKind::Disk | BlockDeviceKind::Unknown => {}
+    }
+
+    if is_mounted_whole_disk(host, paths, &info.block_name)? {
+        bail!(
+            "refusing to write to a disk with mounted filesystems: {}",
+            info.canonical_path.display()
+        );
+    }
+
+    Ok(ValidatedBlockDevice { info })
+}
+
+pub fn plan_flash(image: &ImageInfo, device: &ValidatedBlockDevice, dry_run: bool) -> FlashPlan {
+    let strategy = match image.compression {
+        CompressionKind::None => FlashStrategy::RawCopy,
+        CompressionKind::Zstd => FlashStrategy::ZstdDecompress,
+    };
+
+    FlashPlan {
+        image: image.clone(),
+        device: device.info.clone(),
+        strategy,
+        dry_run,
+    }
+}
+
+pub fn execute_flash(plan: &FlashPlan) -> Result<u64> {
+    let input = File::open(&plan.image.path)
+        .with_context(|| format!("failed to open image {}", plan.image.path.display()))?;
+
+    let mut reader: Box<dyn Read> = match plan.strategy {
+        FlashStrategy::RawCopy => Box::new(BufReader::new(input)),
+        FlashStrategy::ZstdDecompress => Box::new(
+            Decoder::new(BufReader::new(input))
+                .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
+        ),
+    };
+
+    let mut output = OpenOptions::new()
+        .write(true)
+        .open(&plan.device.canonical_path)
+        .with_context(|| {
+            format!(
+                "failed to open device {}",
+                plan.device.canonical_path.display()
+            )
+        })?;
+
+    let bytes_written = io::copy(&mut reader, &mut output).with_context(|| {
+        format!(
+            "failed while writing {}",
+            plan.device.canonical_path.display()
+        )
+    })?;
+    output
+        .flush()
+        .with_context(|| format!("failed to flush {}", plan.device.canonical_path.display()))?;
+    output
+        .sync_all()
+        .with_context(|| format!("failed to sync {}", plan.device.canonical_path.display()))?;
+
+    Ok(bytes_written)
+}
+
+pub fn verify_flash(plan: &FlashPlan) -> Result<FlashVerificationResult> {
+    let mut expected = artifact_payload_reader(plan)?;
+    let mut actual =
+        BufReader::new(File::open(&plan.device.canonical_path).with_context(|| {
+            format!(
+                "failed to open device {} for verification",
+                plan.device.canonical_path.display()
+            )
+        })?);
+
+    let mut expected_buffer = [0_u8; 64 * 1024];
+    let mut actual_buffer = [0_u8; 64 * 1024];
+    let mut verified_bytes = 0_u64;
+
+    loop {
+        let expected_read = expected.read(&mut expected_buffer).with_context(|| {
+            format!(
+                "failed to read expected payload from {}",
+                plan.image.path.display()
+            )
+        })?;
+        if expected_read == 0 {
+            return Ok(FlashVerificationResult {
+                image_path: plan.image.path.clone(),
+                device_path: plan.device.canonical_path.clone(),
+                strategy: plan.strategy,
+                verified_bytes,
+                matched: true,
+            });
+        }
+
+        let mut actual_read_total = 0;
+        while actual_read_total < expected_read {
+            let read = actual
+                .read(&mut actual_buffer[actual_read_total..expected_read])
+                .with_context(|| {
+                    format!(
+                        "failed to read {} during verification",
+                        plan.device.canonical_path.display()
+                    )
+                })?;
+            if read == 0 {
+                return Ok(FlashVerificationResult {
+                    image_path: plan.image.path.clone(),
+                    device_path: plan.device.canonical_path.clone(),
+                    strategy: plan.strategy,
+                    verified_bytes,
+                    matched: false,
+                });
+            }
+            actual_read_total += read;
+        }
+
+        if expected_buffer[..expected_read] != actual_buffer[..expected_read] {
+            return Ok(FlashVerificationResult {
+                image_path: plan.image.path.clone(),
+                device_path: plan.device.canonical_path.clone(),
+                strategy: plan.strategy,
+                verified_bytes,
+                matched: false,
+            });
+        }
+
+        verified_bytes += expected_read as u64;
+    }
+}
+
+pub fn validate_required_device_size(plan: &FlashPlan, required_bytes: u64) -> Result<()> {
+    if let Some(device_size) = plan.device.size_bytes {
+        if device_size < required_bytes {
+            bail!(
+                "target device is too small: {} bytes available, {} bytes required",
+                device_size,
+                required_bytes
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn artifact_payload_reader(plan: &FlashPlan) -> Result<Box<dyn Read>> {
+    let input = File::open(&plan.image.path)
+        .with_context(|| format!("failed to open image {}", plan.image.path.display()))?;
+
+    match plan.strategy {
+        FlashStrategy::RawCopy => Ok(Box::new(BufReader::new(input))),
+        FlashStrategy::ZstdDecompress => Ok(Box::new(
+            Decoder::new(BufReader::new(input))
+                .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
+        )),
+    }
+}
+
+fn inspect_device_with<H: DeviceHost>(
+    host: &H,
+    paths: &LinuxPaths,
+    device: &Path,
+) -> Result<BlockDeviceInfo> {
     let canonical_path = host
         .canonicalize(device)
         .with_context(|| format!("failed to resolve target device {}", device.display()))?;
@@ -112,60 +281,51 @@ pub fn validate_target_device_with<H: DeviceHost>(
         );
     }
 
-    if is_mounted_whole_disk(host, paths, &block_name)? {
-        bail!(
-            "refusing to write to a disk with mounted filesystems: {}",
-            canonical_path.display()
-        );
-    }
-
-    Ok(ValidatedBlockDevice {
+    Ok(BlockDeviceInfo {
         original_path: device.to_path_buf(),
         canonical_path,
-        block_name,
+        block_name: block_name.clone(),
+        kind: block_device_kind(&block_name),
+        size_bytes: read_sysfs_trimmed(host, &sys_entry.join("size"))
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(|sectors| sectors.saturating_mul(512)),
+        removable: read_sysfs_trimmed(host, &sys_entry.join("removable")).and_then(|value| {
+            match value.as_str() {
+                "0" => Some(false),
+                "1" => Some(true),
+                _ => None,
+            }
+        }),
+        model: read_sysfs_trimmed(host, &sys_entry.join("device/model")),
+        vendor: read_sysfs_trimmed(host, &sys_entry.join("device/vendor")),
     })
 }
 
-pub fn plan_flash(image: &ImageInfo, device: &ValidatedBlockDevice) -> FlashPlan {
-    let strategy = match image.compression {
-        CompressionKind::None => FlashStrategy::RawCopy,
-        CompressionKind::Zstd => FlashStrategy::ZstdDecompress,
-    };
-
-    FlashPlan {
-        image: image.clone(),
-        device: device.canonical_path.clone(),
-        strategy,
+fn block_device_kind(block_name: &str) -> BlockDeviceKind {
+    if block_name.starts_with("loop") {
+        BlockDeviceKind::Loop
+    } else if block_name.starts_with("ram") {
+        BlockDeviceKind::Ram
+    } else if block_name.starts_with("dm-") {
+        BlockDeviceKind::DeviceMapper
+    } else if block_name.starts_with("md") {
+        BlockDeviceKind::MdRaid
+    } else if block_name
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_alphabetic())
+    {
+        BlockDeviceKind::Disk
+    } else {
+        BlockDeviceKind::Unknown
     }
 }
 
-pub fn execute_flash(plan: &FlashPlan) -> Result<u64> {
-    let input = File::open(&plan.image.path)
-        .with_context(|| format!("failed to open image {}", plan.image.path.display()))?;
-
-    let mut reader: Box<dyn Read> = match plan.strategy {
-        FlashStrategy::RawCopy => Box::new(BufReader::new(input)),
-        FlashStrategy::ZstdDecompress => Box::new(
-            Decoder::new(BufReader::new(input))
-                .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
-        ),
-    };
-
-    let mut output = OpenOptions::new()
-        .write(true)
-        .open(&plan.device)
-        .with_context(|| format!("failed to open device {}", plan.device.display()))?;
-
-    let bytes_written = io::copy(&mut reader, &mut output)
-        .with_context(|| format!("failed while writing {}", plan.device.display()))?;
-    output
-        .flush()
-        .with_context(|| format!("failed to flush {}", plan.device.display()))?;
-    output
-        .sync_all()
-        .with_context(|| format!("failed to sync {}", plan.device.display()))?;
-
-    Ok(bytes_written)
+fn read_sysfs_trimmed<H: DeviceHost>(host: &H, path: &Path) -> Option<String> {
+    host.read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 fn is_mounted_whole_disk<H: DeviceHost>(
@@ -229,10 +389,10 @@ fn whole_disk_name<H: DeviceHost>(
 #[cfg(test)]
 mod tests {
     use super::{
-        DeviceHost, FlashStrategy, LinuxPaths, RealDeviceHost, execute_flash, plan_flash,
-        validate_target_device_with,
+        DeviceHost, LinuxPaths, RealDeviceHost, execute_flash, inspect_device_with, plan_flash,
+        validate_required_device_size, validate_target_device_with, verify_flash,
     };
-    use bootswain_core::{CompressionKind, ImageInfo};
+    use bootswain_core::{BlockDeviceKind, CompressionKind, FlashPlan, FlashStrategy, ImageInfo};
     use std::collections::HashSet;
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -269,6 +429,48 @@ mod tests {
         }
     }
 
+    fn make_paths(tmp: &tempfile::TempDir) -> LinuxPaths {
+        LinuxPaths {
+            sys_class_block: tmp.path().join("sys/class/block"),
+            proc_mounts: tmp.path().join("proc/mounts"),
+        }
+    }
+
+    fn make_host() -> TestHost {
+        TestHost::default()
+    }
+
+    fn create_disk_fixture(tmp: &tempfile::TempDir, disk_name: &str) -> (PathBuf, LinuxPaths) {
+        let dev_root = tmp.path().join("dev");
+        let sys_class = tmp.path().join("sys/class/block");
+        let sys_devices = tmp.path().join("sys/devices/mock");
+        let proc_dir = tmp.path().join("proc");
+        fs::create_dir_all(&dev_root).expect("dev root");
+        fs::create_dir_all(&sys_class).expect("sys class");
+        fs::create_dir_all(sys_devices.join(disk_name)).expect("sys target");
+        fs::create_dir_all(&proc_dir).expect("proc");
+        fs::write(proc_dir.join("mounts"), "").expect("mounts");
+
+        let disk = dev_root.join(disk_name);
+        fs::write(&disk, "").expect("disk");
+        symlink(sys_devices.join(disk_name), sys_class.join(disk_name)).expect("disk sys symlink");
+        fs::write(sys_devices.join(disk_name).join("size"), "4096").expect("size");
+        fs::write(sys_devices.join(disk_name).join("removable"), "1").expect("removable");
+        fs::create_dir_all(sys_devices.join(disk_name).join("device")).expect("device dir");
+        fs::write(
+            sys_devices.join(disk_name).join("device/model"),
+            "USB Reader\n",
+        )
+        .expect("model");
+        fs::write(
+            sys_devices.join(disk_name).join("device/vendor"),
+            "Kingston\n",
+        )
+        .expect("vendor");
+
+        (disk, make_paths(tmp))
+    }
+
     #[test]
     fn rejects_partition_targets() {
         let tmp = tempdir().expect("tempdir");
@@ -287,12 +489,9 @@ mod tests {
         symlink(sys_devices.join("sdb/sdb1"), sys_class.join("sdb1")).expect("sys symlink");
         fs::write(sys_devices.join("sdb/sdb1/partition"), "1").expect("partition marker");
 
-        let host = TestHost::default()
-            .with_block_device(fs::canonicalize(&target).expect("canonical target"));
-        let paths = LinuxPaths {
-            sys_class_block: sys_class,
-            proc_mounts: proc_dir.join("mounts"),
-        };
+        let host =
+            make_host().with_block_device(fs::canonicalize(&target).expect("canonical target"));
+        let paths = make_paths(&tmp);
 
         let error =
             validate_target_device_with(&host, &paths, &target).expect_err("partition rejected");
@@ -324,13 +523,10 @@ mod tests {
         )
         .expect("mounts");
 
-        let host = TestHost::default()
+        let host = make_host()
             .with_block_device(fs::canonicalize(&disk).expect("canonical disk"))
             .with_block_device(fs::canonicalize(&part).expect("canonical partition"));
-        let paths = LinuxPaths {
-            sys_class_block: sys_class,
-            proc_mounts: proc_dir.join("mounts"),
-        };
+        let paths = make_paths(&tmp);
 
         let error =
             validate_target_device_with(&host, &paths, &disk).expect_err("mounted disk rejected");
@@ -346,13 +542,21 @@ mod tests {
             sha256: "abc".into(),
         };
         let device = super::ValidatedBlockDevice {
-            original_path: PathBuf::from("/dev/sdb"),
-            canonical_path: PathBuf::from("/dev/sdb"),
-            block_name: "sdb".into(),
+            info: bootswain_core::BlockDeviceInfo {
+                original_path: PathBuf::from("/dev/sdb"),
+                canonical_path: PathBuf::from("/dev/sdb"),
+                block_name: "sdb".into(),
+                kind: BlockDeviceKind::Disk,
+                size_bytes: Some(1024),
+                removable: Some(true),
+                model: None,
+                vendor: None,
+            },
         };
 
-        let plan = plan_flash(&image, &device);
+        let plan = plan_flash(&image, &device, true);
         assert_eq!(plan.strategy, FlashStrategy::ZstdDecompress);
+        assert!(plan.dry_run);
     }
 
     #[test]
@@ -374,25 +578,45 @@ mod tests {
             encoder.finish().expect("finish");
         }
 
-        let raw_plan = super::FlashPlan {
+        let raw_plan = FlashPlan {
             image: ImageInfo {
                 path: raw_image.clone(),
                 compression: CompressionKind::None,
                 size_bytes: 9,
                 sha256: String::new(),
             },
-            device: raw_target.clone(),
+            device: bootswain_core::BlockDeviceInfo {
+                original_path: raw_target.clone(),
+                canonical_path: raw_target.clone(),
+                block_name: "raw-device".into(),
+                kind: BlockDeviceKind::Unknown,
+                size_bytes: None,
+                removable: None,
+                model: None,
+                vendor: None,
+            },
             strategy: FlashStrategy::RawCopy,
+            dry_run: false,
         };
-        let zstd_plan = super::FlashPlan {
+        let zstd_plan = FlashPlan {
             image: ImageInfo {
                 path: zstd_image.clone(),
                 compression: CompressionKind::Zstd,
                 size_bytes: fs::metadata(&zstd_image).expect("zstd metadata").len(),
                 sha256: String::new(),
             },
-            device: zstd_target.clone(),
+            device: bootswain_core::BlockDeviceInfo {
+                original_path: zstd_target.clone(),
+                canonical_path: zstd_target.clone(),
+                block_name: "zstd-device".into(),
+                kind: BlockDeviceKind::Unknown,
+                size_bytes: None,
+                removable: None,
+                model: None,
+                vendor: None,
+            },
             strategy: FlashStrategy::ZstdDecompress,
+            dry_run: false,
         };
 
         execute_flash(&raw_plan).expect("raw flash");
@@ -406,6 +630,145 @@ mod tests {
             fs::read(&zstd_target).expect("zstd target bytes"),
             b"bootswain"
         );
+
+        let raw_verify = verify_flash(&raw_plan).expect("raw verify");
+        assert!(raw_verify.matched);
+        assert_eq!(raw_verify.verified_bytes, 9);
+
+        let zstd_verify = verify_flash(&zstd_plan).expect("zstd verify");
+        assert!(zstd_verify.matched);
+        assert_eq!(zstd_verify.verified_bytes, 9);
+    }
+
+    #[test]
+    fn verify_flash_reports_mismatch_and_capacity_errors() {
+        let tmp = tempdir().expect("tempdir");
+        let image = tmp.path().join("raw.img");
+        let target = tmp.path().join("raw-device");
+        fs::write(&image, b"expected").expect("write image");
+        fs::write(&target, b"different").expect("write target");
+
+        let plan = FlashPlan {
+            image: ImageInfo {
+                path: image,
+                compression: CompressionKind::None,
+                size_bytes: 8,
+                sha256: String::new(),
+            },
+            device: bootswain_core::BlockDeviceInfo {
+                original_path: target.clone(),
+                canonical_path: target,
+                block_name: "raw-device".into(),
+                kind: BlockDeviceKind::Unknown,
+                size_bytes: Some(4),
+                removable: None,
+                model: None,
+                vendor: None,
+            },
+            strategy: FlashStrategy::RawCopy,
+            dry_run: false,
+        };
+
+        let verification = verify_flash(&plan).expect("verify mismatch");
+        assert!(!verification.matched);
+
+        let error = validate_required_device_size(&plan, 8).expect_err("capacity error");
+        assert!(error.to_string().contains("too small"));
+    }
+
+    #[test]
+    fn verify_flash_reports_truncated_target_as_mismatch() {
+        let tmp = tempdir().expect("tempdir");
+        let image = tmp.path().join("raw.img");
+        let target = tmp.path().join("raw-device");
+        fs::write(&image, b"expected").expect("write image");
+        fs::write(&target, b"exp").expect("write truncated target");
+
+        let plan = FlashPlan {
+            image: ImageInfo {
+                path: image,
+                compression: CompressionKind::None,
+                size_bytes: 8,
+                sha256: String::new(),
+            },
+            device: bootswain_core::BlockDeviceInfo {
+                original_path: target.clone(),
+                canonical_path: target,
+                block_name: "raw-device".into(),
+                kind: BlockDeviceKind::Unknown,
+                size_bytes: Some(8),
+                removable: None,
+                model: None,
+                vendor: None,
+            },
+            strategy: FlashStrategy::RawCopy,
+            dry_run: false,
+        };
+
+        let verification = verify_flash(&plan).expect("verify truncated target");
+        assert!(!verification.matched);
+        assert_eq!(verification.verified_bytes, 0);
+    }
+
+    #[test]
+    fn required_device_size_accepts_unknown_or_sufficient_capacity() {
+        let image = ImageInfo {
+            path: PathBuf::from("/tmp/raw.img"),
+            compression: CompressionKind::None,
+            size_bytes: 8,
+            sha256: String::new(),
+        };
+        let unknown_device = super::ValidatedBlockDevice {
+            info: bootswain_core::BlockDeviceInfo {
+                original_path: PathBuf::from("/dev/mock0"),
+                canonical_path: PathBuf::from("/dev/mock0"),
+                block_name: "mock0".into(),
+                kind: BlockDeviceKind::Unknown,
+                size_bytes: None,
+                removable: None,
+                model: None,
+                vendor: None,
+            },
+        };
+        let sufficient_device = super::ValidatedBlockDevice {
+            info: bootswain_core::BlockDeviceInfo {
+                size_bytes: Some(16),
+                ..unknown_device.info.clone()
+            },
+        };
+
+        let unknown_plan = plan_flash(&image, &unknown_device, false);
+        validate_required_device_size(&unknown_plan, 16).expect("unknown capacity accepted");
+
+        let sufficient_plan = plan_flash(&image, &sufficient_device, false);
+        validate_required_device_size(&sufficient_plan, 16).expect("sufficient capacity accepted");
+    }
+
+    #[test]
+    fn rejects_virtual_device_kinds() {
+        for disk_name in ["loop0", "ram0", "dm-0", "md0"] {
+            let tmp = tempdir().expect("tempdir");
+            let (disk, paths) = create_disk_fixture(&tmp, disk_name);
+            let host = make_host().with_block_device(fs::canonicalize(&disk).expect("canonical"));
+
+            let error =
+                validate_target_device_with(&host, &paths, &disk).expect_err("virtual rejected");
+            assert!(error.to_string().contains("unsafe virtual block device"));
+        }
+    }
+
+    #[test]
+    fn reads_sysfs_backed_metadata() {
+        let tmp = tempdir().expect("tempdir");
+        let (disk, paths) = create_disk_fixture(&tmp, "sdb");
+        let host = make_host().with_block_device(fs::canonicalize(&disk).expect("canonical"));
+
+        let info = inspect_device_with(&host, &paths, &disk).expect("device info");
+        assert_eq!(info.kind, BlockDeviceKind::Disk);
+        assert_eq!(info.size_bytes, Some(4096 * 512));
+        assert_eq!(info.removable, Some(true));
+        assert_eq!(info.model.as_deref(), Some("USB Reader"));
+        assert_eq!(info.vendor.as_deref(), Some("Kingston"));
     }
 
     #[test]

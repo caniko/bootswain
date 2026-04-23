@@ -1,4 +1,4 @@
-use bootswain_core::{AutobootResult, ImageInfo, ProbeStepResult};
+use bootswain_core::{AutobootResult, FailureStage, ImageInfo, ProbeStepResult};
 use bootswain_probe::{ProbeConfig, SerialIo, run_trial_with_session};
 use std::collections::VecDeque;
 use std::io;
@@ -73,6 +73,7 @@ fn clean_trial_runs_full_sequence() {
 
     let mut serial = MockSerial::new([
         "U-Boot 2026.04\nHit any key to stop autoboot: 0\n=> ",
+        "starting USB...\nBus usb@fe900000: 2 USB Device(s) found\n=> ",
         "USB device tree:\n  1 Hub\n=> ",
         "resetting USB...\nBus usb@fe900000: 2 USB Device(s) found\n=> ",
         "USB device tree:\n  1 Hub\n  +-2  Mass Storage Kingston\n=> ",
@@ -81,12 +82,14 @@ fn clean_trial_runs_full_sequence() {
         .expect("clean trial");
 
     assert_eq!(trial.autoboot_result, AutobootResult::Other);
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Ok);
     assert_eq!(trial.usb_tree_result, ProbeStepResult::Ok);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::Ok);
+    assert_eq!(trial.failure_stage, FailureStage::None);
     assert!(trial.final_detected_usb_summary.contains("Kingston"));
     assert_eq!(
         serial.writes,
-        vec!["usb tree\n", "usb reset\n", "usb tree\n"]
+        vec!["usb start\n", "usb tree\n", "usb reset\n", "usb tree\n"]
     );
 }
 
@@ -102,8 +105,43 @@ fn reset_during_autoboot_marks_trial_as_failed() {
         .expect("autoboot reset trial");
 
     assert_eq!(trial.autoboot_result, AutobootResult::Abort);
+    assert_eq!(trial.failure_stage, FailureStage::Autoboot);
+    assert_eq!(trial.usb_start_result, ProbeStepResult::NotRun);
     assert_eq!(trial.usb_tree_result, ProbeStepResult::NotRun);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::NotRun);
+}
+
+#[test]
+fn reset_during_usb_start_is_reported() {
+    let tmp = tempdir().expect("tempdir");
+    let trial_dir = tmp.path().join("trial-1");
+    std::fs::create_dir_all(&trial_dir).expect("trial dir");
+
+    let mut serial = MockSerial::new([
+        "U-Boot 2026.04\n=> ",
+        "starting USB...\nResetting CPU ...\n",
+    ]);
+    let trial = run_trial_with_session(&mut serial, &test_config(tmp.path().into()), 1, &trial_dir)
+        .expect("usb start reset trial");
+
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Reset);
+    assert_eq!(trial.failure_stage, FailureStage::UsbStart);
+    assert_eq!(trial.usb_tree_result, ProbeStepResult::NotRun);
+    assert_eq!(trial.usb_reset_result, ProbeStepResult::NotRun);
+}
+
+#[test]
+fn timeout_during_usb_start_is_reported() {
+    let tmp = tempdir().expect("tempdir");
+    let trial_dir = tmp.path().join("trial-1");
+    std::fs::create_dir_all(&trial_dir).expect("trial dir");
+
+    let mut serial = MockSerial::new(["U-Boot 2026.04\n=> ", "starting USB...\n"]);
+    let trial = run_trial_with_session(&mut serial, &test_config(tmp.path().into()), 1, &trial_dir)
+        .expect("usb start timeout trial");
+
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Timeout);
+    assert_eq!(trial.failure_stage, FailureStage::UsbStart);
 }
 
 #[test]
@@ -114,12 +152,15 @@ fn reset_during_usb_tree_is_reported() {
 
     let mut serial = MockSerial::new([
         "U-Boot 2026.04\n=> ",
+        "starting USB...\n=> ",
         "USB device tree:\nResetting CPU ...\n",
     ]);
     let trial = run_trial_with_session(&mut serial, &test_config(tmp.path().into()), 1, &trial_dir)
         .expect("usb tree reset trial");
 
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Ok);
     assert_eq!(trial.usb_tree_result, ProbeStepResult::Reset);
+    assert_eq!(trial.failure_stage, FailureStage::UsbTree1);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::NotRun);
 }
 
@@ -131,18 +172,42 @@ fn reset_during_usb_reset_is_reported() {
 
     let mut serial = MockSerial::new([
         "U-Boot 2026.04\n=> ",
+        "starting USB...\n=> ",
         "USB device tree:\n  1 Hub\n=> ",
         "resetting USB...\nResetting CPU ...\n",
     ]);
     let trial = run_trial_with_session(&mut serial, &test_config(tmp.path().into()), 1, &trial_dir)
         .expect("usb reset failure");
 
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Ok);
     assert_eq!(trial.usb_tree_result, ProbeStepResult::Ok);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::Reset);
+    assert_eq!(trial.failure_stage, FailureStage::UsbReset);
 }
 
 #[test]
-fn no_prompt_timeout_leaves_commands_unrun() {
+fn usb_stopped_prompt_state_succeeds_once_usb_start_runs() {
+    let tmp = tempdir().expect("tempdir");
+    let trial_dir = tmp.path().join("trial-1");
+    std::fs::create_dir_all(&trial_dir).expect("trial dir");
+
+    let mut serial = MockSerial::new([
+        "USB is stopped. Please issue 'usb start' first.\n=> ",
+        "starting USB...\nBus usb@fe900000: 2 USB Device(s) found\n=> ",
+        "USB device tree:\n  1 Hub\n=> ",
+        "resetting USB...\nBus usb@fe900000: 2 USB Device(s) found\n=> ",
+        "USB device tree:\n  1 Hub\n  +-2  Mass Storage Kingston\n=> ",
+    ]);
+    let trial = run_trial_with_session(&mut serial, &test_config(tmp.path().into()), 1, &trial_dir)
+        .expect("usb stopped trial");
+
+    assert_eq!(trial.failure_stage, FailureStage::None);
+    assert_eq!(trial.usb_start_result, ProbeStepResult::Ok);
+    assert!(trial.final_detected_usb_summary.contains("Kingston"));
+}
+
+#[test]
+fn no_prompt_timeout_marks_autoboot_failure() {
     let tmp = tempdir().expect("tempdir");
     let trial_dir = tmp.path().join("trial-1");
     std::fs::create_dir_all(&trial_dir).expect("trial dir");
@@ -153,6 +218,8 @@ fn no_prompt_timeout_leaves_commands_unrun() {
         .expect("timeout trial");
 
     assert_eq!(trial.autoboot_result, AutobootResult::Other);
+    assert_eq!(trial.failure_stage, FailureStage::Autoboot);
+    assert_eq!(trial.usb_start_result, ProbeStepResult::NotRun);
     assert_eq!(trial.usb_tree_result, ProbeStepResult::NotRun);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::NotRun);
 }
