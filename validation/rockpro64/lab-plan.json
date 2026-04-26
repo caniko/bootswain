@@ -14,10 +14,12 @@
       "steps": [
         {
           "name": "boot installer menu",
-          "command": null,
+          "command": "echo ROCKPro64; setenv bootswain_script_mode validation-shell; setenv devtype mmc; setenv distro_bootpart 1; mmc dev 1; mmc rescan; setenv devnum 1; if fatload mmc 1:1 ${scriptaddr} /boot.scr.uimg; then source ${scriptaddr}; else if fatload mmc 1:1 ${scriptaddr} /boot/boot.scr.uimg; then source ${scriptaddr}; else mmc dev 0; mmc rescan; setenv devnum 0; if fatload mmc 0:1 ${scriptaddr} /boot.scr.uimg; then source ${scriptaddr}; else if fatload mmc 0:1 ${scriptaddr} /boot/boot.scr.uimg; then source ${scriptaddr}; else fatls mmc 1:1 /; fatls mmc 1:1 /boot; fatls mmc 0:1 /; fatls mmc 0:1 /boot; echo \"Failed to load SPI installer script from SD\"; false; fi; fi; fi; fi",
           "expect": [
             "ROCKPro64",
-            "Flash SPI"
+            "Continue boot",
+            "Rescan detected boot options",
+            "Flash SPI firmware"
           ],
           "timeout_secs": 30
         }
@@ -34,6 +36,7 @@
           "name": "flash firmware to spi",
           "command": "run bootswain_flash_spi",
           "expect": [
+            "Flashing SPI payload from",
             "SPI flash complete"
           ],
           "timeout_secs": 120
@@ -51,6 +54,7 @@
           "name": "flash firmware to spi again",
           "command": "run bootswain_flash_spi",
           "expect": [
+            "Flashing SPI payload from",
             "SPI flash complete"
           ],
           "timeout_secs": 120
@@ -100,7 +104,7 @@
       "steps": [
         {
           "name": "boot uefi installer from sd",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_sd",
           "expect": [
             "Booting"
           ],
@@ -117,7 +121,7 @@
       "steps": [
         {
           "name": "boot extlinux image from sd",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_sd",
           "expect": [
             "Booting"
           ],
@@ -134,7 +138,7 @@
       "steps": [
         {
           "name": "boot uefi installer from emmc",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_emmc",
           "expect": [
             "Booting"
           ],
@@ -151,7 +155,7 @@
       "steps": [
         {
           "name": "boot extlinux image from emmc",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_emmc",
           "expect": [
             "Booting"
           ],
@@ -168,7 +172,7 @@
       "steps": [
         {
           "name": "boot uefi installer from usb",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_usb",
           "expect": [
             "Booting"
           ],
@@ -185,7 +189,7 @@
       "steps": [
         {
           "name": "boot extlinux image from usb",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_usb",
           "expect": [
             "Booting"
           ],
@@ -202,7 +206,7 @@
       "steps": [
         {
           "name": "boot uefi installer from nvme",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_nvme",
           "expect": [
             "Booting"
           ],
@@ -219,7 +223,7 @@
       "steps": [
         {
           "name": "boot extlinux image from nvme",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_nvme",
           "expect": [
             "Booting"
           ],
@@ -236,7 +240,7 @@
       "steps": [
         {
           "name": "show useful no-media state",
-          "command": "bootflow scan",
+          "command": "run bootswain_boot_auto",
           "expect": [
             "No bootable media"
           ],

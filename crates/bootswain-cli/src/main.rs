@@ -13,7 +13,7 @@ use bootswain_cli::{
 use bootswain_core::{
     FirmwareArtifact, FirmwareArtifactKind, FirmwareManifest, FlashExecutionResult, FlashRunResult,
     QemuDiskInterface, ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus,
-    ValidationPlan, ValidationRun,
+    ValidationPlan, ValidationRun, read_json_file, write_pretty_json_file,
 };
 use bootswain_flash::{
     execute_flash, inspect_image, plan_flash, validate_required_device_size,
@@ -24,6 +24,10 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 #[derive(Debug, Parser)]
@@ -89,6 +93,8 @@ enum FlashCommand {
         verify_only: bool,
         #[arg(long)]
         json: bool,
+        #[arg(long)]
+        allow_non_flashable: bool,
     },
 }
 
@@ -174,6 +180,8 @@ enum ValidateCommand {
         #[arg(long)]
         allow_destructive_spi: bool,
         #[arg(long)]
+        max_step_timeout_secs: Option<u64>,
+        #[arg(long)]
         json: bool,
     },
 }
@@ -227,6 +235,7 @@ fn run_flash(command: FlashCommand) -> Result<()> {
             verify,
             verify_only,
             json,
+            allow_non_flashable,
         } => {
             if dry_run && verify {
                 bail!(
@@ -242,9 +251,12 @@ fn run_flash(command: FlashCommand) -> Result<()> {
                 None => None,
             };
             let selected_artifact = match (&manifest_bundle, artifact) {
-                (Some((manifest_path, manifest)), Some(kind)) => {
-                    Some(resolve_flash_artifact(manifest_path, manifest, kind)?)
-                }
+                (Some((manifest_path, manifest)), Some(kind)) => Some(resolve_flash_artifact(
+                    manifest_path,
+                    manifest,
+                    kind,
+                    allow_non_flashable,
+                )?),
                 (Some(_), None) => bail!("--manifest requires --artifact for flash commands"),
                 (None, Some(_)) => bail!("--artifact requires --manifest"),
                 (None, None) => None,
@@ -421,11 +433,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 .with_context(|| format!("failed to create {}", out.display()))?;
             let run = materialize_validation_run(plan);
             let run_path = out.join("validation-run.json");
-            fs::write(
-                &run_path,
-                serde_json::to_string_pretty(&run).context("failed to encode validation run")?,
-            )
-            .with_context(|| format!("failed to write {}", run_path.display()))?;
+            write_pretty_json_file(&run_path, &run)?;
 
             if json {
                 println!(
@@ -503,9 +511,15 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
             out,
             scenarios,
             allow_destructive_spi,
+            max_step_timeout_secs,
             json,
         } => {
             let plan = load_validation_plan(&plan)?;
+            if matches!(max_step_timeout_secs, Some(0)) {
+                bail!("--max-step-timeout-secs must be at least 1");
+            }
+            let cancellation = Arc::new(AtomicBool::new(false));
+            install_validation_interrupt_handler(cancellation.clone())?;
             let config = RockPro64SerialRunConfig {
                 port,
                 baud,
@@ -513,6 +527,9 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 selected_scenarios: scenarios,
                 allow_destructive_spi,
                 idle_sleep: Duration::from_millis(20),
+                progress_interval: Duration::from_secs(10),
+                max_step_timeout: max_step_timeout_secs.map(Duration::from_secs),
+                cancellation,
             };
             let run = run_rockpro64_serial_validation(plan, &config)?;
 
@@ -535,6 +552,13 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
             }
 
             if !rockpro64_serial_selected_outcomes_passed(&run) {
+                if run
+                    .outcomes
+                    .iter()
+                    .any(|outcome| outcome.status == ValidationOutcomeStatus::Interrupted)
+                {
+                    bail!("ROCKPro64 serial validation interrupted");
+                }
                 bail!("ROCKPro64 serial validation failed");
             }
         }
@@ -543,10 +567,16 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
     Ok(())
 }
 
+fn install_validation_interrupt_handler(cancellation: Arc<AtomicBool>) -> Result<()> {
+    ctrlc::set_handler(move || {
+        cancellation.store(true, Ordering::SeqCst);
+        eprintln!("bootswain: interrupt requested; writing partial validation run");
+    })
+    .context("failed to install Ctrl-C handler")
+}
+
 fn load_validation_plan(path: &Path) -> Result<ValidationPlan> {
-    let content =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_json::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
+    read_json_file(path)
 }
 
 fn materialize_validation_run(plan: ValidationPlan) -> ValidationRun {
@@ -567,20 +597,19 @@ fn materialize_validation_run(plan: ValidationPlan) -> ValidationRun {
 }
 
 fn load_manifest(path: &Path) -> Result<FirmwareManifest> {
-    let content =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_json::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
+    read_json_file(path)
 }
 
 fn resolve_flash_artifact(
     manifest_path: &Path,
     manifest: &FirmwareManifest,
     kind: FirmwareArtifactKind,
+    allow_non_flashable: bool,
 ) -> Result<(PathBuf, FirmwareArtifact)> {
     let artifact = manifest
         .artifact(kind)
         .with_context(|| format!("manifest does not contain artifact {kind}"))?;
-    if !artifact.flashable {
+    if !artifact.flashable && !allow_non_flashable {
         bail!("artifact {kind} is not marked flashable");
     }
 

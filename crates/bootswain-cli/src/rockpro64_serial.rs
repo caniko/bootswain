@@ -2,12 +2,16 @@ use anyhow::{Context, Result, bail};
 use bootswain_core::{
     Board, ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus, ValidationPlan,
     ValidationRun, ValidationScenario, ValidationScenarioKind, ValidationStep,
+    write_pretty_json_file,
 };
-use bootswain_probe::{RealSerial, SerialIo, segment_has_reset};
-use serde::Serialize;
+use bootswain_probe::{RealSerial, SerialIo};
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,13 +23,35 @@ pub struct RockPro64SerialRunConfig {
     pub selected_scenarios: Vec<String>,
     pub allow_destructive_spi: bool,
     pub idle_sleep: Duration,
+    pub progress_interval: Duration,
+    pub max_step_timeout: Option<Duration>,
+    pub cancellation: Arc<AtomicBool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ReadStatus {
     Matched,
     Reset,
+    Failure(String),
+    Interrupted,
     Timeout,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResetPolicy {
+    Fail,
+    IgnoreBootBanners,
+}
+
+#[derive(Debug, Clone)]
+struct ReadOptions {
+    timeout: Duration,
+    idle_sleep: Duration,
+    progress_interval: Duration,
+    progress_label: Option<String>,
+    fail_on_prompt: bool,
+    repeat_prompt_request: bool,
+    reset_policy: ResetPolicy,
 }
 
 pub fn run_rockpro64_serial_validation(
@@ -53,7 +79,18 @@ where
     let selected = selected_scenarios(&plan, &config.selected_scenarios)?;
     let _ = session.clear();
 
+    progressln(
+        config,
+        &format!(
+            "ROCKPro64 serial validation: {} selected scenario(s), max planned wait {}s",
+            selected.len(),
+            selected_timeout_secs(&plan, &selected, config)
+        ),
+    );
+
     let mut outcomes = Vec::with_capacity(plan.scenarios.len());
+    let mut stopped_after: Option<String> = None;
+    let mut interrupted = false;
     for scenario in &plan.scenarios {
         if !selected.contains(&scenario.name) {
             outcomes.push(ValidationOutcome {
@@ -64,6 +101,16 @@ where
                 logs: Vec::new(),
                 failure: Some("scenario not selected for this hardware run".into()),
             });
+            continue;
+        }
+
+        if interrupted {
+            outcomes.push(interrupted_outcome(scenario));
+            continue;
+        }
+
+        if let Some(failed_scenario) = &stopped_after {
+            outcomes.push(stopped_after_failure_outcome(scenario, failed_scenario));
             continue;
         }
 
@@ -79,11 +126,18 @@ where
             continue;
         }
 
-        outcomes.push(run_scenario(session, scenario, config)?);
+        progressln(config, &format!("scenario {}: starting", scenario.name));
+        let outcome = run_scenario(session, scenario, config)?;
+        match outcome.status {
+            ValidationOutcomeStatus::Failed => stopped_after = Some(outcome.scenario.clone()),
+            ValidationOutcomeStatus::Interrupted => interrupted = true,
+            _ => {}
+        }
+        outcomes.push(outcome);
     }
 
     let run = ValidationRun { plan, outcomes };
-    write_json(&config.out.join("validation-run.json"), &run)?;
+    write_pretty_json_file(config.out.join("validation-run.json"), &run)?;
     Ok(run)
 }
 
@@ -130,6 +184,33 @@ fn selected_scenarios(plan: &ValidationPlan, requested: &[String]) -> Result<BTr
     Ok(requested)
 }
 
+fn interrupted_outcome(scenario: &ValidationScenario) -> ValidationOutcome {
+    ValidationOutcome {
+        scenario: scenario.name.clone(),
+        status: ValidationOutcomeStatus::Interrupted,
+        executor: Some(ValidationExecutorKind::RockPro64Serial),
+        evidence: Vec::new(),
+        logs: Vec::new(),
+        failure: Some("validation interrupted by operator".into()),
+    }
+}
+
+fn stopped_after_failure_outcome(
+    scenario: &ValidationScenario,
+    failed_scenario: &str,
+) -> ValidationOutcome {
+    ValidationOutcome {
+        scenario: scenario.name.clone(),
+        status: ValidationOutcomeStatus::NotRun,
+        executor: Some(ValidationExecutorKind::RockPro64Serial),
+        evidence: Vec::new(),
+        logs: Vec::new(),
+        failure: Some(format!(
+            "run stopped after failed scenario: {failed_scenario}"
+        )),
+    }
+}
+
 fn run_scenario<T>(
     session: &mut T,
     scenario: &ValidationScenario,
@@ -160,7 +241,7 @@ where
     let mut log = String::new();
     let mut evidence = Vec::new();
     for step in &scenario.steps {
-        match run_step(session, step, config, &mut log)? {
+        match run_step(session, scenario, step, config, &mut log)? {
             StepResult::Passed(mut step_evidence) => evidence.append(&mut step_evidence),
             StepResult::Failed(failure) => {
                 fs::write(&serial_log, log.as_bytes())
@@ -172,6 +253,18 @@ where
                     evidence,
                     logs: vec![relative_log],
                     failure: Some(failure),
+                });
+            }
+            StepResult::Interrupted => {
+                fs::write(&serial_log, log.as_bytes())
+                    .with_context(|| format!("failed to write {}", serial_log.display()))?;
+                return Ok(ValidationOutcome {
+                    scenario: scenario.name.clone(),
+                    status: ValidationOutcomeStatus::Interrupted,
+                    executor: Some(ValidationExecutorKind::RockPro64Serial),
+                    evidence,
+                    logs: vec![relative_log],
+                    failure: Some("validation interrupted by operator".into()),
                 });
             }
         }
@@ -192,10 +285,12 @@ where
 enum StepResult {
     Passed(Vec<String>),
     Failed(String),
+    Interrupted,
 }
 
 fn run_step<T>(
     session: &mut T,
+    scenario: &ValidationScenario,
     step: &ValidationStep,
     config: &RockPro64SerialRunConfig,
     log: &mut String,
@@ -203,18 +298,56 @@ fn run_step<T>(
 where
     T: SerialIo,
 {
-    let timeout = Duration::from_secs(step.timeout_secs);
+    let timeout = effective_step_timeout(step, config);
+    progressln(
+        config,
+        &format!(
+            "step {}: waiting up to {}s for {}",
+            step.name,
+            timeout.as_secs(),
+            if step.command.is_some() {
+                "U-Boot prompt before command"
+            } else {
+                "expected serial output"
+            }
+        ),
+    );
     if let Some(command) = &step.command {
         let mut prompt_segment = String::new();
         match read_until_patterns(
             session,
-            timeout,
-            config.idle_sleep,
+            ReadOptions {
+                timeout,
+                idle_sleep: config.idle_sleep,
+                progress_interval: config.progress_interval,
+                progress_label: Some(format!("{} prompt", step.name)),
+                fail_on_prompt: false,
+                repeat_prompt_request: true,
+                reset_policy: ResetPolicy::IgnoreBootBanners,
+            },
+            &config.cancellation,
             log,
             &mut prompt_segment,
             &["=> ".to_owned()],
         )? {
-            ReadStatus::Matched => {}
+            ReadStatus::Matched => {
+                if command_step_allows_precommand_match(scenario)
+                    && step
+                        .expect
+                        .iter()
+                        .all(|pattern| prompt_segment.contains(pattern))
+                {
+                    return Ok(StepResult::Passed(
+                        step.expect
+                            .iter()
+                            .map(|pattern| {
+                                format!("{} matched serial pattern: {:?}", step.name, pattern)
+                            })
+                            .collect(),
+                    ));
+                }
+                clear_stale_input_before_command(session, step, log)?;
+            }
             ReadStatus::Reset => {
                 return Ok(StepResult::Failed(format!(
                     "{}: board reset before command prompt",
@@ -227,9 +360,17 @@ where
                     step.name
                 )));
             }
+            ReadStatus::Failure(failure) => {
+                return Ok(StepResult::Failed(format!(
+                    "{}: failed while waiting for U-Boot prompt before command: {failure}",
+                    step.name
+                )));
+            }
+            ReadStatus::Interrupted => return Ok(StepResult::Interrupted),
         }
 
         log.push_str(&format!("\n# bootswain sent: {command}\n"));
+        progressln(config, &format!("step {}: sending `{command}`", step.name));
         session
             .write_all(format!("{command}\n").as_bytes())
             .with_context(|| format!("failed to write command for step {}", step.name))?;
@@ -238,11 +379,26 @@ where
             .with_context(|| format!("failed to flush command for step {}", step.name))?;
     }
 
+    if step.command.is_none() && step.expect.iter().any(|pattern| pattern == "=> ") {
+        log.push_str(&format!(
+            "\n# bootswain waiting for U-Boot prompt for {}\n",
+            step.name
+        ));
+    }
+
     let mut step_segment = String::new();
     match read_until_patterns(
         session,
-        timeout,
-        config.idle_sleep,
+        ReadOptions {
+            timeout,
+            idle_sleep: config.idle_sleep,
+            progress_interval: config.progress_interval,
+            progress_label: Some(step.name.clone()),
+            fail_on_prompt: step.command.is_some(),
+            repeat_prompt_request: false,
+            reset_policy: ResetPolicy::Fail,
+        },
+        &config.cancellation,
         log,
         &mut step_segment,
         &step.expect,
@@ -260,19 +416,34 @@ where
         ReadStatus::Timeout => Ok(StepResult::Failed(format!(
             "{}: timed out waiting for expected serial patterns: {}",
             step.name,
-            step.expect
-                .iter()
-                .map(|pattern| format!("{pattern:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            format_expected_patterns(&step.expect)
         ))),
+        ReadStatus::Failure(failure) => Ok(StepResult::Failed(format!("{}: {failure}", step.name))),
+        ReadStatus::Interrupted => Ok(StepResult::Interrupted),
     }
+}
+
+fn clear_stale_input_before_command<T>(
+    session: &mut T,
+    step: &ValidationStep,
+    log: &mut String,
+) -> Result<()>
+where
+    T: SerialIo,
+{
+    log.push_str(&format!(
+        "\n# bootswain cleared stale serial input before command for {}\n",
+        step.name
+    ));
+    session
+        .clear()
+        .with_context(|| format!("failed to clear serial input before step {}", step.name))
 }
 
 fn read_until_patterns<T>(
     session: &mut T,
-    timeout: Duration,
-    idle_sleep: Duration,
+    options: ReadOptions,
+    cancellation: &AtomicBool,
     full_log: &mut String,
     segment_log: &mut String,
     patterns: &[String],
@@ -285,12 +456,39 @@ where
     }
 
     let start = Instant::now();
+    let mut last_progress = start;
+    let mut last_prompt_request = start;
+    let mut boot_menu_shell_selected = false;
     let mut buffer = [0_u8; 1024];
-    while start.elapsed() < timeout {
+    while start.elapsed() < options.timeout {
+        if cancellation.load(Ordering::SeqCst) {
+            return Ok(ReadStatus::Interrupted);
+        }
         let read = session.read_chunk(&mut buffer)?;
         if read == 0 {
-            if !idle_sleep.is_zero() {
-                thread::sleep(idle_sleep);
+            if options.progress_interval > Duration::ZERO
+                && last_progress.elapsed() >= options.progress_interval
+            {
+                if let Some(label) = &options.progress_label {
+                    eprintln!(
+                        "bootswain: {label}: still waiting after {}s/{timeout_secs}s, captured {} byte(s)",
+                        start.elapsed().as_secs(),
+                        segment_log.len(),
+                        timeout_secs = options.timeout.as_secs()
+                    );
+                }
+                last_progress = Instant::now();
+            }
+            maybe_request_prompt(
+                session,
+                options.repeat_prompt_request,
+                &mut last_prompt_request,
+                &mut boot_menu_shell_selected,
+                full_log,
+                segment_log,
+            )?;
+            if !options.idle_sleep.is_zero() {
+                thread::sleep(options.idle_sleep);
             }
             continue;
         }
@@ -299,15 +497,163 @@ where
         full_log.push_str(&chunk);
         segment_log.push_str(&chunk);
 
-        if segment_has_reset(segment_log) {
-            return Ok(ReadStatus::Reset);
-        }
         if patterns.iter().all(|pattern| segment_log.contains(pattern)) {
             return Ok(ReadStatus::Matched);
+        }
+        maybe_request_prompt(
+            session,
+            options.repeat_prompt_request,
+            &mut last_prompt_request,
+            &mut boot_menu_shell_selected,
+            full_log,
+            segment_log,
+        )?;
+        if rockpro64_serial_segment_has_reset(segment_log, options.reset_policy) {
+            return Ok(ReadStatus::Reset);
+        }
+        if options.fail_on_prompt
+            && let Some(marker) = terminal_failure_marker(segment_log)
+        {
+            return Ok(ReadStatus::Failure(format!(
+                "terminal serial failure before expected patterns appeared: {marker:?}; waiting for {}",
+                format_expected_patterns(patterns)
+            )));
+        }
+        if options.fail_on_prompt && segment_has_uboot_prompt(segment_log) {
+            return Ok(ReadStatus::Failure(format!(
+                "command returned to U-Boot prompt before expected serial patterns appeared: {}",
+                format_expected_patterns(patterns)
+            )));
         }
     }
 
     Ok(ReadStatus::Timeout)
+}
+
+fn maybe_request_prompt<T>(
+    session: &mut T,
+    enabled: bool,
+    last_prompt_request: &mut Instant,
+    boot_menu_shell_selected: &mut bool,
+    log: &mut String,
+    segment_log: &str,
+) -> Result<()>
+where
+    T: SerialIo,
+{
+    if !enabled {
+        return Ok(());
+    }
+
+    if segment_has_boot_menu_shell_entry(segment_log) && !*boot_menu_shell_selected {
+        log.push_str(
+            "\n# bootswain selected U-Boot shell from boot menu while waiting for prompt\n",
+        );
+        session
+            .write_all(b"9\n")
+            .context("failed to select U-Boot shell from boot menu")?;
+        session
+            .flush()
+            .context("failed to flush boot menu shell selection")?;
+        *last_prompt_request = Instant::now();
+        *boot_menu_shell_selected = true;
+        return Ok(());
+    }
+
+    if last_prompt_request.elapsed() < Duration::from_secs(2) {
+        return Ok(());
+    }
+
+    log.push_str("\n# bootswain sent autoboot interrupt while waiting for U-Boot prompt\n");
+    session
+        .write_all(b"\n")
+        .context("failed to send autoboot interrupt")?;
+    session
+        .flush()
+        .context("failed to flush autoboot interrupt")?;
+    *last_prompt_request = Instant::now();
+    Ok(())
+}
+
+fn effective_step_timeout(step: &ValidationStep, config: &RockPro64SerialRunConfig) -> Duration {
+    let plan_timeout = Duration::from_secs(step.timeout_secs);
+    match config.max_step_timeout {
+        Some(max_timeout) if max_timeout < plan_timeout => max_timeout,
+        _ => plan_timeout,
+    }
+}
+
+fn selected_timeout_secs(
+    plan: &ValidationPlan,
+    selected: &BTreeSet<String>,
+    config: &RockPro64SerialRunConfig,
+) -> u64 {
+    plan.scenarios
+        .iter()
+        .filter(|scenario| selected.contains(&scenario.name))
+        .flat_map(|scenario| scenario.steps.iter())
+        .map(|step| effective_step_timeout(step, config).as_secs())
+        .sum()
+}
+
+fn progressln(config: &RockPro64SerialRunConfig, message: &str) {
+    if config.progress_interval > Duration::ZERO {
+        eprintln!("bootswain: {message}");
+    }
+}
+
+fn rockpro64_serial_segment_has_reset(text: &str, reset_policy: ResetPolicy) -> bool {
+    let hard_reset_markers = ["Synchronous Abort", "Resetting CPU", "resetting ..."];
+    if hard_reset_markers
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        return true;
+    }
+
+    if reset_policy == ResetPolicy::IgnoreBootBanners {
+        return false;
+    }
+
+    ["\nU-Boot TPL ", "\nU-Boot SPL ", "\nU-Boot "]
+        .iter()
+        .any(|needle| text.contains(needle))
+}
+
+fn terminal_failure_marker(text: &str) -> Option<&'static str> {
+    [
+        "SPI probe failed",
+        "SPI flash write failed",
+        "SPI verify mismatch",
+        "SPI verify read failed",
+        "SPI erase command failed",
+        "SPI flashing is refused from installed SPI firmware",
+        "BootsWain installer media detected under installed firmware",
+        "Failed to load SPI payload",
+        "Unexpected board compatible",
+        "Boot failed (err=",
+        "No more bootdevs",
+        "No detected boot options",
+        "No bootable media on",
+    ]
+    .into_iter()
+    .find(|marker| text.contains(marker))
+}
+
+fn segment_has_uboot_prompt(text: &str) -> bool {
+    text.starts_with("=> ") || text.contains("\n=> ") || text.ends_with("=> ")
+}
+
+fn segment_has_boot_menu_shell_entry(text: &str) -> bool {
+    text.contains("*** U-Boot Boot Menu ***") && text.contains("Enter U-Boot shell")
+}
+
+fn format_expected_patterns(patterns: &[String]) -> String {
+    patterns
+        .iter()
+        .map(|pattern| format!("{pattern:?}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn is_destructive_spi_scenario(scenario: &ValidationScenario) -> bool {
@@ -315,6 +661,10 @@ fn is_destructive_spi_scenario(scenario: &ValidationScenario) -> bool {
         scenario.kind,
         ValidationScenarioKind::SpiInstall | ValidationScenarioKind::SpiErase
     )
+}
+
+fn command_step_allows_precommand_match(scenario: &ValidationScenario) -> bool {
+    !is_destructive_spi_scenario(scenario)
 }
 
 fn safe_path_segment(value: &str) -> String {
@@ -328,17 +678,6 @@ fn safe_path_segment(value: &str) -> String {
             }
         })
         .collect()
-}
-
-fn write_json<T>(path: &Path, value: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    fs::write(
-        path,
-        serde_json::to_string_pretty(value).context("failed to encode JSON")?,
-    )
-    .with_context(|| format!("failed to write {}", path.display()))
 }
 
 #[cfg(test)]
@@ -355,6 +694,10 @@ mod tests {
     use std::collections::VecDeque;
     use std::io;
     use std::path::PathBuf;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
     use std::time::Duration;
     use tempfile::tempdir;
 
@@ -362,6 +705,7 @@ mod tests {
     struct FakeSerial {
         chunks: VecDeque<Vec<u8>>,
         writes: Vec<String>,
+        clear_drops: VecDeque<usize>,
     }
 
     impl FakeSerial {
@@ -372,12 +716,30 @@ mod tests {
                     .map(|chunk| chunk.as_bytes().to_vec())
                     .collect(),
                 writes: Vec::new(),
+                clear_drops: VecDeque::new(),
+            }
+        }
+
+        fn with_chunks_and_clear_drops(chunks: &[&str], clear_drops: &[usize]) -> Self {
+            Self {
+                chunks: chunks
+                    .iter()
+                    .map(|chunk| chunk.as_bytes().to_vec())
+                    .collect(),
+                writes: Vec::new(),
+                clear_drops: clear_drops.iter().copied().collect(),
             }
         }
     }
 
     impl SerialIo for FakeSerial {
         fn clear(&mut self) -> io::Result<()> {
+            let Some(drop_count) = self.clear_drops.pop_front() else {
+                return Ok(());
+            };
+            for _ in 0..drop_count {
+                let _ = self.chunks.pop_front();
+            }
             Ok(())
         }
 
@@ -443,6 +805,94 @@ mod tests {
     }
 
     #[test]
+    fn command_step_catches_autoboot_after_reset_before_write() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+        let mut serial = FakeSerial::with_chunks(&[
+            "\nU-Boot TPL 2026.04\n",
+            "U-Boot SPL 2026.04\n",
+            "U-Boot 2026.04\nHit any key to stop autoboot:  0\n=> ",
+            "Scanning for bootflows\n=> ",
+        ]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
+        assert_eq!(serial.writes, vec!["bootflow scan\n"]);
+    }
+
+    #[test]
+    fn command_step_selects_shell_from_boot_menu_before_write() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+        let mut serial = FakeSerial::with_chunks(&[
+            "*** U-Boot Boot Menu ***\n1. Continue boot\n9. Enter U-Boot shell\n",
+            "=> ",
+            "Scanning for bootflows\n=> ",
+        ]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
+        assert_eq!(serial.writes, vec!["9\n", "bootflow scan\n"]);
+    }
+
+    #[test]
+    fn non_destructive_command_step_passes_when_expected_output_appears_before_prompt() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+        let mut serial = FakeSerial::with_chunks(&["Scanning for bootflows\n=> "]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
+        assert!(serial.writes.is_empty());
+    }
+
+    #[test]
+    fn command_step_clears_stale_input_after_prompt_before_write() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
+        let mut serial = FakeSerial::with_chunks_and_clear_drops(
+            &[
+                "=> ",
+                "SPI probe failed\n",
+                "Flashing SPI payload from mmc 0:1\nSPI flash complete\n",
+            ],
+            &[0, 1],
+        );
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
+        assert_eq!(serial.writes, vec!["run bootswain_flash_spi\n"]);
+    }
+
+    #[test]
     fn timeout_marks_selected_scenario_failed() {
         let tmp = tempdir().expect("tempdir");
         let config = sample_config(
@@ -502,6 +952,33 @@ mod tests {
     }
 
     #[test]
+    fn boot_banner_after_command_marks_selected_scenario_failed() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
+        let mut serial = FakeSerial::with_chunks(&[
+            "=> ",
+            "Flashing SPI payload from mmc 1:1\nWriting SPI payload\n\nU-Boot TPL 2026.04\n",
+        ]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+        assert!(
+            outcome
+                .failure
+                .as_deref()
+                .expect("failure")
+                .contains("board reset")
+        );
+    }
+
+    #[test]
     fn destructive_spi_scenarios_are_skipped_without_flag() {
         let tmp = tempdir().expect("tempdir");
         let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], false);
@@ -524,7 +1001,10 @@ mod tests {
     fn destructive_spi_scenarios_run_with_flag() {
         let tmp = tempdir().expect("tempdir");
         let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
-        let mut serial = FakeSerial::with_chunks(&["=> ", "SPI flash complete\n"]);
+        let mut serial = FakeSerial::with_chunks(&[
+            "=> ",
+            "Flashing SPI payload from mmc 0:1\nSPI flash complete\n",
+        ]);
 
         let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
             .expect("serial validation");
@@ -536,6 +1016,165 @@ mod tests {
             .expect("spi outcome");
         assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
         assert_eq!(serial.writes, vec!["run bootswain_flash_spi\n"]);
+    }
+
+    #[test]
+    fn terminal_failure_marker_fails_without_waiting_for_full_timeout() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
+        let mut serial = FakeSerial::with_chunks(&[
+            "=> ",
+            "Flashing SPI payload from mmc 0:1\nSPI probe failed\n=> ",
+        ]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+        assert!(
+            outcome
+                .failure
+                .as_deref()
+                .expect("failure")
+                .contains("SPI probe failed")
+        );
+    }
+
+    #[test]
+    fn installed_firmware_spi_refusal_fails_without_waiting_for_full_timeout() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
+        let mut serial = FakeSerial::with_chunks(&[
+            "=> ",
+            "SPI flashing is refused from installed SPI firmware\n=> ",
+        ]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+        assert!(
+            outcome
+                .failure
+                .as_deref()
+                .expect("failure")
+                .contains("refused from installed SPI firmware")
+        );
+    }
+
+    #[test]
+    fn expected_no_bootable_media_marker_still_passes() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+        let mut plan = sample_plan();
+        plan.scenarios[1].steps[0].expect = vec!["No bootable media on SD".into()];
+        let mut serial = FakeSerial::with_chunks(&["=> ", "No bootable media on SD\n=> "]);
+
+        let run = run_rockpro64_serial_validation_with_session(plan, &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
+    }
+
+    #[test]
+    fn prompt_return_after_command_without_expected_patterns_fails_immediately() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
+        let mut serial =
+            FakeSerial::with_chunks(&["=> ", "Flashing SPI payload from mmc 0:1\n=> "]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let outcome = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+        assert!(
+            outcome
+                .failure
+                .as_deref()
+                .expect("failure")
+                .contains("command returned to U-Boot prompt")
+        );
+    }
+
+    #[test]
+    fn selected_run_stops_after_first_failed_scenario() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(
+            tmp.path().join("out"),
+            vec!["bootflow".into(), "spi-install".into()],
+            true,
+        );
+        let mut serial = FakeSerial::with_chunks(&["=> ", "SPI probe failed\n=> "]);
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let bootflow = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        let spi = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "spi-install")
+            .expect("spi outcome");
+        assert_eq!(bootflow.status, ValidationOutcomeStatus::Failed);
+        assert_eq!(spi.status, ValidationOutcomeStatus::NotRun);
+        assert_eq!(
+            spi.failure.as_deref(),
+            Some("run stopped after failed scenario: bootflow")
+        );
+    }
+
+    #[test]
+    fn interruption_writes_partial_run_and_marks_selected_scenarios_interrupted() {
+        let tmp = tempdir().expect("tempdir");
+        let config = sample_config(
+            tmp.path().join("out"),
+            vec!["recovery-console".into(), "bootflow".into()],
+            false,
+        );
+        config.cancellation.store(true, Ordering::SeqCst);
+        let mut serial = FakeSerial::default();
+
+        let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+            .expect("serial validation");
+
+        let recovery = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "recovery-console")
+            .expect("recovery outcome");
+        let bootflow = run
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.scenario == "bootflow")
+            .expect("bootflow outcome");
+        assert_eq!(recovery.status, ValidationOutcomeStatus::Interrupted);
+        assert_eq!(bootflow.status, ValidationOutcomeStatus::Interrupted);
+        assert!(config.out.join("recovery-console/serial.log").exists());
+        assert!(config.out.join("validation-run.json").exists());
     }
 
     #[test]
@@ -563,6 +1202,9 @@ mod tests {
             selected_scenarios,
             allow_destructive_spi,
             idle_sleep: Duration::ZERO,
+            progress_interval: Duration::ZERO,
+            max_step_timeout: None,
+            cancellation: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -609,7 +1251,10 @@ mod tests {
                     steps: vec![ValidationStep {
                         name: "flash spi".into(),
                         command: Some("run bootswain_flash_spi".into()),
-                        expect: vec!["SPI flash complete".into()],
+                        expect: vec![
+                            "Flashing SPI payload from".into(),
+                            "SPI flash complete".into(),
+                        ],
                         timeout_secs: 1,
                     }],
                 },

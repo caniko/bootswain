@@ -450,6 +450,72 @@ fn flash_refuses_non_flashable_manifest_artifacts_before_device_access() {
     assert!(stderr.contains("is not marked flashable"));
 }
 
+#[test]
+fn flash_allows_non_flashable_manifest_artifacts_with_explicit_override() {
+    let tmp = tempdir().expect("tempdir");
+    let manifest = tmp.path().join("manifest.json");
+    let image = tmp.path().join("spi.installer.img");
+    let device = tmp.path().join("fake-device");
+    fs::write(&manifest, sample_non_flashable_manifest_json()).expect("write manifest");
+    fs::write(&image, b"bootswain").expect("write image");
+    fs::write(&device, b"not a block device").expect("write fake device");
+
+    let output = Command::cargo_bin("bootswain")
+        .expect("bootswain binary")
+        .args([
+            "flash",
+            "sd",
+            "--manifest",
+            manifest.to_str().expect("utf8 manifest path"),
+            "--artifact",
+            "spi-installer",
+            "--device",
+            device.to_str().expect("utf8 device path"),
+            "--dry-run",
+            "--allow-non-flashable",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+
+    let stderr = String::from_utf8(output).expect("stderr utf8");
+    assert!(!stderr.contains("is not marked flashable"));
+    assert!(stderr.contains("target is not a block device"));
+}
+
+#[test]
+fn flash_accepts_non_flashable_override_without_manifest_artifact() {
+    let tmp = tempdir().expect("tempdir");
+    let image = tmp.path().join("image.img");
+    let device = tmp.path().join("fake-device");
+    fs::write(&image, b"bootswain").expect("write image");
+    fs::write(&device, b"not a block device").expect("write fake device");
+
+    let output = Command::cargo_bin("bootswain")
+        .expect("bootswain binary")
+        .args([
+            "flash",
+            "sd",
+            "--image",
+            image.to_str().expect("utf8 image path"),
+            "--device",
+            device.to_str().expect("utf8 device path"),
+            "--dry-run",
+            "--allow-non-flashable",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+
+    let stderr = String::from_utf8(output).expect("stderr utf8");
+    assert!(!stderr.contains("is not marked flashable"));
+    assert!(stderr.contains("target is not a block device"));
+}
+
 fn sample_manifest_json() -> &'static str {
     r#"{
   "schema_version": 1,
@@ -458,7 +524,8 @@ fn sample_manifest_json() -> &'static str {
   "sources": {
     "u_boot": "v2026.04",
     "trusted_firmware_a": "v2.13.0",
-    "bootswain": "test"
+    "bootswain": "test",
+    "nixpkgs": "test-nixpkgs"
   },
   "storage_layout": {
     "spi_size_bytes": 16777216,
@@ -469,7 +536,7 @@ fn sample_manifest_json() -> &'static str {
     "shared_storage_firmware_partition": "bootswain-firmware"
   },
   "boot_policy": {
-    "default_order": ["sd", "emmc", "usb"],
+    "default_order": ["emmc", "sd", "usb", "nvme"],
     "preferred_protocols": ["uefi", "extlinux"],
     "no_bootable_media_behavior": "show boot menu"
   },
@@ -495,6 +562,7 @@ fn sample_manifest_json() -> &'static str {
       "target": "sd",
       "protocols": ["u-boot-shell"],
       "tested": false,
+      "scenarios": ["sd-installer-menu"],
       "notes": "lab pending"
     }
   ],
@@ -516,7 +584,8 @@ fn sample_non_flashable_manifest_json() -> &'static str {
   "sources": {
     "u_boot": "v2026.04",
     "trusted_firmware_a": "v2.13.0",
-    "bootswain": "test"
+    "bootswain": "test",
+    "nixpkgs": "test-nixpkgs"
   },
   "storage_layout": {
     "spi_size_bytes": 16777216,
@@ -543,7 +612,7 @@ fn sample_non_flashable_manifest_json() -> &'static str {
       "path": "spi.installer.img",
       "compression": "none",
       "size_bytes": 9,
-      "sha256": "deadbeef",
+      "sha256": "0c8bb5af83b12eb17b5bcdad45b7ea18fa2653749afa92c67a33fdd4ede619c1",
       "required_device_size_bytes": 9,
       "flashable": false
     }

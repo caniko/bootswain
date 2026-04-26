@@ -1,18 +1,23 @@
-# ROCKPro64 SPI Layout, Provisional
+# ROCKPro64 SPI Layout
 
-This is a scaffolded storage map for a 16 MiB SPI device. The offsets below
-must be revalidated against upstream U-Boot and board documentation before any
-hardware release.
+This document records the layout used by the ROCKPro64 SPI payload artifacts
+built in the flake. The default bundle is a release candidate; stable claims
+require imported hardware validation evidence.
 
-## Provisional Map
+## Current Map
 
-- `0x00000000` - `0x0007ffff`: `idbloader` scaffold
-- `0x00080000` - `0x003fffff`: `u-boot.itb` scaffold
-- `0x00400000` - `0x00ffffff`: reserved for future environment or recovery use
+- `0x00000000` - `0x0002ffff`: `idbloader.img`
+- `0x00030000` - `0x0005ffff`: reserved padding
+- `0x00060000` - `0x00187fff`: `u-boot.itb`
+- `0x00188000` - `0x00ffffff`: reserved and left untouched by the combined SPI
+  payload image
 
 ## Policy Notes
 
-- Keep installer images deterministic with no dependency on stale persistent
-  environment data.
-- Do not write user data into the reserved region without a reviewed policy.
-- Do not treat this map as hardware-validated.
+- The combined `u-boot-rockchip-spi.bin` image is written at offset `0x0` of
+  SPI flash.
+- The SD installer writes that combined image with `sf update`, and erases the
+  full 16 MiB SPI device for uninstall testing.
+- Persistent environment is disabled for this milestone. The reserved tail of
+  SPI remains unclaimed until the project has a reviewed environment policy and
+  hardware promotion logs.

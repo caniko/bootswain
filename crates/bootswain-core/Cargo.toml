@@ -8,9 +8,8 @@ repository.workspace = true
 readme = "../../README.md"
 
 [dependencies]
+anyhow.workspace = true
 serde.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
 
 [lints]

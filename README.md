@@ -1,22 +1,30 @@
 # Bootswain
 
-`bootswain` is a host-side Rust workspace for repeatable ROCKPro64-first flash
-and probe workflows around stock U-Boot. It does not replace U-Boot on-device.
+`bootswain` is a Rust workspace for repeatable ROCKPro64-first flash, probe,
+and firmware packaging workflows around stock U-Boot. ROCKPro64 firmware
+artifacts are release candidates until real hardware evidence is imported under
+`validation/rockpro64/stable/`; stable support claims are not emitted by the
+default release bundle.
+
 It replaces the manual host steps we have been using for:
 
 - inspecting installer and firmware artifacts
 - flashing SD media safely
 - capturing serial logs
 - running the ROCKPro64 USB probe sequence reproducibly
+- packaging real RK3399 U-Boot, TF-A, SPI installer, and shared-storage images
+  in Nix
 
 ## Current scope
 
 V1 is intentionally narrow:
 
 - Linux-only
-- host-side only
 - path-based inputs for images and serial ports
 - built-in ROCKPro64 support only
+- release-candidate flashing is enabled for the SPI installer target
+- shared-storage image flashing remains gated until SD/eMMC validation evidence
+  is imported
 
 The first probe flow matches the investigation protocol already used in
 Tow-Boot:
@@ -61,6 +69,32 @@ Flash an SD card:
 bootswain flash sd \
   --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
   --device /dev/sdb
+```
+
+Use the convenience wrapper from the dev shell:
+
+```sh
+nix develop
+just flash-targets
+just flash \
+  --target rockpro64-spi-installer \
+  --device /dev/sdX \
+  --verify
+```
+
+List the Nix-built flash targets:
+
+```sh
+nix run .#flash -- --list-targets
+```
+
+Dry-run the release-candidate ROCKPro64 SPI installer target:
+
+```sh
+nix run .#flash -- \
+  --target rockpro64-spi-installer \
+  --device /dev/sdb \
+  --dry-run
 ```
 
 Validate a flash target without writing:
@@ -138,3 +172,9 @@ CI runs:
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
 - `nix flake check`
+
+Stable ROCKPro64 promotion additionally requires:
+
+- `validation/rockpro64/stable/validation-run.json`
+- full serial logs for every claimed scenario
+- a successful build of `.#rockpro64-stable-release-bundle`

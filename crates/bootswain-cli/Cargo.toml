@@ -17,6 +17,7 @@ bootswain-core = { path = "../bootswain-core" }
 bootswain-flash = { path = "../bootswain-flash" }
 bootswain-probe = { path = "../bootswain-probe" }
 clap.workspace = true
+ctrlc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

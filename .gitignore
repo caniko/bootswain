@@ -1,4 +1,8 @@
 /target
 /result
+/result-*
 /.direnv
-
+/.cache
+/bootswain-*-run
+/run2
+/run2-*

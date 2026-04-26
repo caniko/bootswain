@@ -51,16 +51,29 @@ reported as `skipped`.
 
 ## Operator Flow
 
-1. Flash installer media with `bootswain flash sd --manifest <manifest> --artifact spi-installer --verify`.
+1. Flash installer media with `just flash --target rockpro64-spi-installer --device /dev/sdX --verify`.
 2. Boot the ROCKPro64 from SD and capture the full serial log.
-3. Confirm the installer menu identifies ROCKPro64 before any SPI write.
+3. Confirm the installer menu identifies ROCKPro64 and shows `Continue boot`, `Rescan detected boot options`, and `Flash SPI firmware` before any SPI write.
 4. Run SPI install and capture success or failure text.
 5. Power off, remove SD, boot from SPI, and confirm the U-Boot prompt or boot menu appears.
 6. Reinsert installer media and repeat SPI install to validate reinstall behavior.
 7. Run full SPI erase and confirm the board returns to a recoverable SD-boot state.
-8. Test each advertised boot path with both UEFI and extlinux images.
+8. Test each advertised boot path with both UEFI and extlinux images using the per-medium helpers or matching menu entries (`Boot from eMMC`, `Boot from SD`, `Boot from USB`, `Boot from NVMe`).
 9. Test no-bootable-media behavior and recovery-console access.
-10. Archive `validation-run.json`, serial logs, artifact manifest, and exact image checksums.
+10. Copy `validation-run.json`, serial logs, artifact `release.json`, and exact
+    image checksums into `validation/rockpro64/stable/`.
+
+Raw fallback: `nix run .#flash -- --target rockpro64-spi-installer --device /dev/sdX --verify`.
+
+The `rockpro64-spi-installer` target is a release-candidate flash target.
+Stable promotion is performed by building `.#rockpro64-stable-release-bundle`
+after importing passing hardware evidence. Keep NVMe unclaimed until matching
+hardware logs are accepted.
+
+Shared-storage validation uses the generated `shared.disk-image.img` from the
+release candidate bundle. Write it to SD and eMMC in separate trials, then run
+the matching `sd-uefi-boot`, `sd-extlinux-boot`, `emmc-uefi-boot`, and
+`emmc-extlinux-boot` scenarios.
 
 ## Abort Conditions
 

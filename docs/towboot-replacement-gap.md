@@ -35,15 +35,17 @@ Covered by the repository today:
   sequence: wait for prompt, `usb start`, `usb tree`, `usb reset`, `usb tree`.
 - Probe output as raw serial logs plus machine-readable `trial.json` and
   `summary.json`.
+- Reproducible release-candidate RK3399 U-Boot and TF-A packaging through Nix.
+- SD-bootable SPI installer and shared-storage raw images with canonical
+  `spi.installer.img` and `shared.disk-image.img` names.
+- U-Boot boot menu fragments for installer and installed-firmware roles.
+- Evidence-gated stable promotion through `validation/rockpro64/stable/`.
 
 Not covered today:
 
-- Reproducible ROCKPro64 firmware builds.
-- RK3399 boot-stage packaging.
-- SPI or shared-storage firmware images produced by this project.
-- On-device firmware installation or erase flows.
-- Boot menus, boot-target discovery, UEFI boot, extlinux boot, or persistent
-  firmware settings.
+- Stable hardware claims without imported ROCKPro64 serial logs.
+- Persistent firmware environment edits as a supported workflow.
+- NVMe boot as a release claim.
 
 ## Replacement Target
 
@@ -76,19 +78,19 @@ The relevant behavior target is a boring firmware experience:
 | Host image inspection | `covered` | Computes image metadata and SHA-256 for `.img` and `.img.zst`. | Keep as release and installer validation support. |
 | Host SD flashing | `partial` | Can flash supplied images to whole-disk targets safely from Linux. | Add artifact-specific guardrails, target sizing checks, post-write verification, and operator docs for installer media. |
 | Serial probing | `partial` | Runs repeatable ROCKPro64 USB probe trials against stock U-Boot. | Expand into a hardware validation suite for install, boot, recovery, and storage scenarios. |
-| Firmware build artifacts | `missing` | No U-Boot, TF-A, TPL, SPL, or RK3399 image build pipeline. | Produce reproducible ROCKPro64 firmware binaries, SPI images, shared-storage disk images, checksums, and release outputs. |
-| RK3399 packaging | `missing` | No generation of `idbloader.img`, `u-boot.itb`, or combined firmware layouts. | Package TPL/SPL, TF-A BL31, and U-Boot proper at Rockchip-compatible offsets. |
-| SPI installer | `missing` | Can flash an installer image to SD, but cannot create or run an on-device installer. | Provide an SD-bootable installer with a menu action to flash firmware to SPI. |
-| Safe on-device flashing | `missing` | No U-Boot-side SPI erase/write scripts or recovery policy. | Add board-identity checks, safe erase/write ordering, failure messages, retry paths, and full SPI erase/uninstall flow. |
-| Shared-storage image | `missing` | No shared firmware disk image generation. | Produce a shared-storage image with a protective firmware partition and documented partition policy. |
-| Boot discovery | `missing` | Does not boot operating systems. | Configure standard boot or distro boot scanning for SD, eMMC, USB, and NVMe where supported. |
-| UEFI boot | `missing` | No EFI payload or boot manager support. | Enable UEFI boot as the preferred generic distro path and validate real installers. |
-| extlinux boot | `missing` | No extlinux-compatible boot flow. | Support extlinux as a fallback for distributions that do not use UEFI. |
-| Boot order policy | `missing` | No firmware boot policy. | Define stable target ordering for SPI-installed firmware and shared-storage installs. |
-| Firmware environment | `missing` | No persistent U-Boot environment management. | Define whether SPI builds save environment, where it is stored, and what shared-storage or noenv behavior means. |
-| Boot menu and UI | `missing` | No on-device menu interface. | Provide a BIOS-like menu with bootable target listing, firmware install/erase actions, diagnostics, and U-Boot shell escape. |
+| Firmware build artifacts | `covered for RC` | Builds U-Boot, TF-A, SPI installer, shared image, checksums, release metadata, and provenance. | Import hardware evidence before stable promotion. |
+| RK3399 packaging | `covered for RC` | Generates `idbloader.img`, `u-boot.itb`, `u-boot-rockchip.bin`, and `u-boot-rockchip-spi.bin`. | Validate on hardware before stable claims. |
+| SPI installer | `partial` | Builds an SD installer with menu actions to flash and erase SPI. | Complete hardware validation and archive serial logs. |
+| Safe on-device flashing | `partial` | Adds board check, SPI probe, payload bounds, write, readback, compare, and erase status checks. | Confirm failure modes on hardware. |
+| Shared-storage image | `partial` | Builds a raw shared-storage image with Rockchip loader and a firmware FAT partition. | Validate SD/eMMC boot before marking flashable in stable manifests. |
+| Boot discovery | `partial` | Configures standard boot scanning for eMMC, SD, USB, and NVMe menu entries. | Claim only paths with hardware logs. |
+| UEFI boot | `partial` | Enables U-Boot EFI loader and bootmeth support. | Validate real UEFI installers for each claimed storage class. |
+| extlinux boot | `partial` | Enables extlinux bootmeth support. | Validate real extlinux images for each claimed storage class. |
+| Boot order policy | `covered for RC` | Release metadata and firmware env use eMMC, SD, USB, NVMe order. | Keep claims aligned with validation evidence. |
+| Firmware environment | `covered for RC` | Persistent environment remains disabled and documented. | Revisit only with a reviewed storage policy. |
+| Boot menu and UI | `partial` | Provides serial boot menu, boot target entries, SPI flash/erase in installer, and shell escape. | Validate local input paths only if claimed. |
 | Serial baseline | `partial` | Probe tooling defaults to 115200 baud and documents the ROCKPro64 UART caveat. | Ensure firmware itself uses a documented 115200 serial baseline and supports installer and recovery operation over serial. |
-| Release process | `missing` | No firmware artifact publishing process. | Publish versioned firmware images, installer images, checksums, provenance, changelog, and hardware validation results. |
+| Release process | `partial` | Produces release-candidate bundles and a stable bundle that requires imported evidence. | Add changelog/release notes and real validation logs. |
 | Phone/tablet shortcuts | `not RockPro64 scope` | Not implemented. | Volume-button boot modes and USB mass-storage gadget mode are not ROCKPro64 acceptance criteria unless project scope expands. |
 
 ## Detailed Missing Features

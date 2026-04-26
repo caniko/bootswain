@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use bootswain_core::{
     Board, QemuDiskInterface, ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus,
     ValidationPlan, ValidationRun, ValidationScenario, ValidationScenarioKind,
+    write_pretty_json_file,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -210,7 +211,7 @@ where
         .with_context(|| format!("failed to create {}", config.out.display()))?;
 
     let command = build_qemu_arm64_command(config)?;
-    write_json(&config.out.join("qemu-command.json"), &command)?;
+    write_pretty_json_file(config.out.join("qemu-command.json"), &command)?;
 
     let serial_log_path = config.out.join("serial.log");
     let stderr_log_path = config.out.join("qemu-stderr.log");
@@ -272,7 +273,7 @@ where
         }
     };
 
-    write_json(&config.out.join("validation-run.json"), &run)?;
+    write_pretty_json_file(config.out.join("validation-run.json"), &run)?;
     Ok(run)
 }
 
@@ -401,17 +402,6 @@ fn qemu_option_path(path: &Path, label: &str) -> Result<String> {
         bail!("{label} path contains a comma, which is unsafe in QEMU option syntax");
     }
     Ok(value)
-}
-
-fn write_json<T>(path: &Path, value: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    fs::write(
-        path,
-        serde_json::to_string_pretty(value).context("failed to encode JSON")?,
-    )
-    .with_context(|| format!("failed to write {}", path.display()))
 }
 
 #[cfg(test)]

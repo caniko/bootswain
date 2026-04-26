@@ -15,6 +15,7 @@ inputs. The published release bundle should include:
 - `bl31.elf`
 - `sha256sums.txt`
 - `release.json`
+- `release-notes.md`
 
 If the images are also compressed for distribution, publish the `.zst` versions
 and keep the uncompressed names in the manifest.
@@ -22,10 +23,12 @@ and keep the uncompressed names in the manifest.
 ## Build Procedure
 
 1. Start from a clean checkout in the repository's pinned build environment.
-2. Build the board release bundle and collect the artifacts listed above.
+2. Build the board release-candidate bundle and collect the artifacts listed above.
 3. Generate `sha256sums.txt` and `release.json` from the build outputs.
 4. Verify that the manifest records the source revisions and board inputs used
    to produce the release.
+5. Promote to stable only after importing hardware evidence and building
+   `.#rockpro64-stable-release-bundle`.
 
 ## Build Output Rules
 
@@ -36,8 +39,10 @@ The release output must make the board role clear:
 - `idbloader.img`, `u-boot.itb`, and `bl31.elf` are the board-stage firmware
   components used to construct the release
 
-The release manifest should record source revisions, configuration inputs, and
-the checksum for each published artifact.
+The release manifest records U-Boot, TF-A, nixpkgs, and bootswain source
+revisions plus the checksum for each published artifact.
+`release-notes.md` is generated beside the manifest and summarizes the channel,
+published artifacts, validation state, and unsupported paths.
 
 ## Install Procedure
 
@@ -76,8 +81,9 @@ Tow-Boot replacement:
 - boot an extlinux-based image from supported media
 - capture serial logs for every trial
 
-If the release claims USB or NVMe support, those paths must appear in the
-release validation table. If they are not in the table, they are not claimed.
+If the release claims USB, SD, eMMC, or NVMe support, those paths must appear in
+the release validation table. If they are not in the table, they are not
+claimed.
 
 ## Release Notes
 
@@ -101,6 +107,8 @@ Before publishing a release, confirm that:
 - the SPI installer succeeds from SD media
 - the SPI reinstall path works on a board that already has firmware
 - the board remains recoverable over serial after a failed or missing boot
+- the stable bundle contains passing evidence for every scenario named by its
+  validation claims
 
 ## References
 

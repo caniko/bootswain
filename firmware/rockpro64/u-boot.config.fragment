@@ -1,18 +1,27 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # ROCKPro64 U-Boot fragment
 #
-# This is scaffold only and must be reconciled with upstream U-Boot before any
-# release that claims hardware support.
+# This fragment is appended to the upstream rockpro64-rk3399 defconfig to make
+# the release-candidate installer and firmware images deterministic and expose
+# the commands used by bootswain's validation flows.
 
 CONFIG_ARM64=y
 CONFIG_ARCH_ROCKCHIP=y
 CONFIG_ROCKCHIP_RK3399=y
 CONFIG_DEFAULT_DEVICE_TREE="rockchip/rk3399-rockpro64"
+CONFIG_DEFAULT_FDT_FILE="rockchip/rk3399-rockpro64.dtb"
 CONFIG_DISTRO_DEFAULTS=y
 CONFIG_BOOTSTD=y
+CONFIG_BOOTSTD_FULL=y
+CONFIG_CMD_BOOTFLOW_FULL=y
+CONFIG_BOOTMETH_SCRIPT=y
+CONFIG_BOOTMETH_EXTLINUX=y
+CONFIG_BOOTMETH_EFILOADER=y
 CONFIG_EFI_LOADER=y
 CONFIG_CMD_BOOTMENU=y
 CONFIG_CMD_DHCP=y
 CONFIG_CMD_PXE=y
+CONFIG_CMD_SLEEP=y
 CONFIG_CMD_FS_EXT4=y
 CONFIG_CMD_EXT4_WRITE=y
 CONFIG_CMD_FAT=y
@@ -20,12 +29,17 @@ CONFIG_CMD_GPT=y
 CONFIG_CMD_MMC=y
 CONFIG_CMD_NVME=y
 CONFIG_CMD_PART=y
+CONFIG_CMD_SF=y
 CONFIG_CMD_SCSI=y
 CONFIG_CMD_USB=y
 CONFIG_CMD_ENV=y
+CONFIG_BAUDRATE=115200
+CONFIG_USE_PREBOOT=y
+CONFIG_AUTOBOOT_USE_MENUKEY=y
+CONFIG_AUTOBOOT_MENUKEY=27
 
-# Persistent environment is intentionally disabled in this scaffold.
+# Persistent environment is intentionally disabled for Phase 0.
 # If a future release enables it, the offset and redundancy policy must be
-# documented in spi-layout.md and the release notes.
+# documented in spi-layout.md and promoted only after hardware validation.
 # CONFIG_ENV_IS_IN_SPI_FLASH is not set
 CONFIG_ENV_IS_NOWHERE=y

@@ -10,23 +10,34 @@ This document defines the upstream-first firmware contract for
 - Publish explicit source fragments for U-Boot configuration, environment, and
   boot script behavior.
 - Publish release metadata, checksums, and provenance for the board artifacts.
+- Produce release-candidate SD-bootable SPI installer and shared-storage images,
+  plus an evidence-gated stable bundle for ROCKPro64 Full Phase 0 support.
 
 ## Non-goals
 
-- No claim is made that the firmware artifacts are bootable on hardware.
-- No claim is made that any SPI layout has been validated on a real board.
-- No claim is made that install, erase, or boot flows have been exercised.
+- No stable hardware support claim is made until serial validation evidence is
+  imported under `validation/rockpro64/stable/`.
+- No claim is made for NVMe or any unvalidated storage/controller path.
 
 ## Artifact Contract
 
-- `rockpro64-uboot`: board-oriented U-Boot source bundle and config fragments.
-- `rockpro64-spi-firmware`: SPI firmware contract bundle and layout notes.
-- `rockpro64-spi-installer-img`: SD installer image scaffold.
-- `rockpro64-shared-disk-image-img`: shared-storage image scaffold.
-- `rockpro64-release-manifest`: release metadata.
-- `checksums/provenance`: checksums and provenance records.
+- `rockpro64-uboot`: board-oriented U-Boot sources, config fragments, and real
+  upstream build outputs.
+- `rockpro64-spi-firmware`: SPI firmware bundle, Rockchip payload binaries, and
+  layout notes.
+- `rockpro64-spi-installer-img`: SD installer image producing
+  `spi.installer.img`.
+- `rockpro64-spi-installer-img-experimental`: the same bootable installer image
+  exposed through an experimental flashable bundle.
+- `rockpro64-shared-disk-image-img`: shared-storage image producing
+  `shared.disk-image.img`.
+- `rockpro64-release-bundle`: release-candidate bundle with `release.json`,
+  `sha256sums.txt`, and provenance.
+- `rockpro64-stable-release-bundle`: stable promotion bundle that fails without
+  imported hardware evidence.
 
 ## Release Rule
 
-If a future release claims hardware support, it must add a real validation log
-and remove or replace any scaffold-only wording that remains in this tree.
+If a future release expands stable hardware support, it must add matching
+validation logs and update the stable manifest claims only for paths that
+passed on hardware.
