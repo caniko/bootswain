@@ -1,8 +1,10 @@
-# ROCKPro64 Stable Validation Evidence
+# Stable Evidence
 
 This record defines the evidence required before a ROCKPro64 release candidate
 may be promoted to stable. The default generated bundle is not stable; it emits
 `tested: false` claims until hardware logs are imported.
+
+The stable validation set covers:
 
 - SPI installer menu from SD media
 - SPI install, reinstall, and full erase recovery

@@ -12,10 +12,16 @@
       pkgs.git
       pkgs.just
       pkgs.mtools
+      pkgs.mdbook
       pkgs.qemu
       pkgs.ubootTools
       pkgs.util-linux
+      pkgs.zola
       pkgs.zstd
     ];
+    extraShellHook = ''
+      echo "Website: cd website && zola serve"
+      echo "Documentation: cd docs && mdbook serve"
+    '';
   };
 }

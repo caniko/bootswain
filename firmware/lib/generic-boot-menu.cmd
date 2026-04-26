@@ -78,11 +78,11 @@ fi
 
 setenv bootswain_boot_prepare_all 'usb start; pci enum; nvme scan; true'
 setenv bootswain_boot_auto 'if run bootswain_boot_emmc; then true; elif run bootswain_boot_sd; then true; elif run bootswain_boot_usb; then true; elif run bootswain_boot_nvme; then true; else echo "No bootable media"; false; fi'
-setenv bootswain_boot_detected_menu 'run bootswain_boot_prepare_all; echo "Scanning for detected boot options"; if bootflow scan -m -b; then true; else echo "No detected boot options"; false; fi'
-setenv bootswain_boot_emmc 'run bootswain_boot_prepare_emmc; echo "Scanning eMMC bootflows"; if bootflow scan -lb ${bootswain_boot_target_emmc}; then true; else echo "No bootable media on eMMC"; false; fi'
-setenv bootswain_boot_sd 'run bootswain_boot_prepare_sd; echo "Scanning SD bootflows"; if bootflow scan -lb ${bootswain_boot_target_sd}; then true; else echo "No bootable media on SD"; false; fi'
-setenv bootswain_boot_usb 'run bootswain_boot_prepare_usb; echo "Scanning USB bootflows"; if bootflow scan -lb ${bootswain_boot_target_usb}; then true; else echo "No bootable media on USB"; false; fi'
-setenv bootswain_boot_nvme 'run bootswain_boot_prepare_nvme; echo "Scanning NVMe bootflows"; if bootflow scan -lb ${bootswain_boot_target_nvme}; then true; else echo "No bootable media on NVMe"; false; fi'
+setenv bootswain_boot_detected_menu 'run bootswain_boot_prepare_all; echo "Scanning for detected boot options"; bootflow scan -m -b; echo "No detected boot options"; false'
+setenv bootswain_boot_emmc 'run bootswain_boot_prepare_emmc; echo "Scanning eMMC bootflows"; bootflow scan -lb ${bootswain_boot_target_emmc}; echo "No bootable media on eMMC"; false'
+setenv bootswain_boot_sd 'run bootswain_boot_prepare_sd; echo "Scanning SD bootflows"; bootflow scan -lb ${bootswain_boot_target_sd}; echo "No bootable media on SD"; false'
+setenv bootswain_boot_usb 'run bootswain_boot_prepare_usb; echo "Scanning USB bootflows"; bootflow scan -lb ${bootswain_boot_target_usb}; echo "No bootable media on USB"; false'
+setenv bootswain_boot_nvme 'run bootswain_boot_prepare_nvme; echo "Scanning NVMe bootflows"; bootflow scan -lb ${bootswain_boot_target_nvme}; echo "No bootable media on NVMe"; false'
 
 setenv bootswain_menu 'if test "${bootswain_has_bootmenu}" = "1"; then bootmenu ${bootswain_bootmenu_delay}; else run bootswain_menu_fallback; fi'
 setenv bootswain_menu_fallback 'echo "*** U-Boot Boot Menu ***"; echo "1. Continue boot"; echo "2. ${bootswain_detected_menu_label}"; echo "3. Boot from eMMC"; echo "4. Boot from SD"; echo "5. Boot from USB"; echo "6. Boot from NVMe"; echo "7. Flash SPI firmware"; echo "8. Erase SPI firmware"; echo "9. Enter U-Boot shell"; echo "bootmenu command unavailable; serial command mode active"; echo "Run: run bootswain_flash_spi"; echo "Run: run bootswain_erase_spi"; echo "Run: run bootswain_boot_auto"; echo "bootswain serial command mode ready"'

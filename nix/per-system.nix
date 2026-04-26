@@ -60,6 +60,10 @@
       ;
   };
 
+  sites = import ./modules/sites.nix {
+    inherit pkgs lib root;
+  };
+
   shells = import ./modules/shells.nix {
     inherit rs-harbor pkgs cross toolchain;
   };
@@ -90,6 +94,23 @@
           )
         ];
       };
+    bootableConfig =
+      nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          self.nixosModules.rockpro64Bootable
+          (
+            {...}: {
+              boot.bootswain.rockpro64.firmwarePackage = fakeFirmwarePackage;
+              fileSystems."/" = {
+                device = "none";
+                fsType = "tmpfs";
+              };
+              system.stateVersion = "26.05";
+            }
+          )
+        ];
+      };
     currentSystemConfig = mkTestSystem system;
     aarch64Config = mkTestSystem "aarch64-linux";
     aarch64EvalSummary = pkgs.writeText "bootswain-rockpro64-aarch64-nixos-eval.txt" ''
@@ -104,6 +125,13 @@
         then "true"
         else "false"
       }
+      bootableHostPlatform=${bootableConfig.config.nixpkgs.hostPlatform.system}
+      bootableEnabled=${
+        if bootableConfig.config.boot.bootswain.rockpro64.enable
+        then "true"
+        else "false"
+      }
+      bootableConsole=${builtins.concatStringsSep " " bootableConfig.config.boot.kernelParams}
     '';
   in
     pkgs.runCommand "bootswain-rockpro64-nixos-module-check" {} ''
@@ -119,13 +147,16 @@
       grep -q '^bootFiles=bootswain-rockpro64-boot-files$' ${aarch64EvalSummary}
       grep -q '^grub=false$' ${aarch64EvalSummary}
       grep -q '^extlinux=true$' ${aarch64EvalSummary}
+      grep -q '^bootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
+      grep -q '^bootableEnabled=true$' ${aarch64EvalSummary}
+      grep -q '^bootableConsole=.*console=ttyS2,115200n8' ${aarch64EvalSummary}
 
       mkdir -p "$out"
       cp ${aarch64EvalSummary} "$out/aarch64-eval.txt"
       printf '%s\n' "bootswain ROCKPro64 NixOS module check passed" > "$out/result"
     '';
 in {
-  packages = workspace.packages // artifacts.packages;
+  packages = workspace.packages // artifacts.packages // sites.packages;
   apps = flash.apps;
   checks =
     workspace.checks

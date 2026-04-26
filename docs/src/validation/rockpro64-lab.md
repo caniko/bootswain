@@ -13,10 +13,6 @@ The hardware validation fixture is:
 validation/rockpro64/lab-plan.json
 ```
 
-It is intentionally marked with executor `rockpro64-serial`. Until a real lab
-run captures serial logs, `bootswain validate run` should materialize this plan
-as `not-run`.
-
 Run one non-destructive scenario:
 
 ```sh
@@ -58,22 +54,18 @@ reported as `skipped`.
 5. Power off, remove SD, boot from SPI, and confirm the U-Boot prompt or boot menu appears.
 6. Reinsert installer media and repeat SPI install to validate reinstall behavior.
 7. Run full SPI erase and confirm the board returns to a recoverable SD-boot state.
-8. Test each advertised boot path with both UEFI and extlinux images using the per-medium helpers or matching menu entries (`Boot from eMMC`, `Boot from SD`, `Boot from USB`, `Boot from NVMe`).
+8. Test each advertised boot path with both UEFI and extlinux images using the per-medium helpers or matching menu entries.
 9. Test no-bootable-media behavior and recovery-console access.
-10. Copy `validation-run.json`, serial logs, artifact `release.json`, and exact
-    image checksums into `validation/rockpro64/stable/`.
-
-Raw fallback: `nix run .#flash -- --target rockpro64-spi-installer --device /dev/sdX --verify`.
-
-The `rockpro64-spi-installer` target is a release-candidate flash target.
-Stable promotion is performed by building `.#rockpro64-stable-release-bundle`
-after importing passing hardware evidence. Keep NVMe unclaimed until matching
-hardware logs are accepted.
+10. Copy `validation-run.json`, serial logs, artifact `release.json`, and exact image checksums into `validation/rockpro64/stable/`.
 
 Shared-storage validation uses the generated `shared.disk-image.img` from the
 release candidate bundle. Write it to SD and eMMC in separate trials, then run
 the matching `sd-uefi-boot`, `sd-extlinux-boot`, `emmc-uefi-boot`, and
 `emmc-extlinux-boot` scenarios.
+
+Before recording eMMC results, confirm the board's U-Boot MMC mapping. On the
+tested ROCKPro64 v2.1, eMMC is `mmc0` and SD is `mmc1`; see
+[Operator Notes](../rockpro64/operator-notes.md).
 
 ## Abort Conditions
 
@@ -85,9 +77,3 @@ Stop the run and do not publish support claims if any of these occur:
 - The board cannot boot from SD after SPI erase.
 - Any advertised storage class lacks a captured passing serial log.
 - Any boot protocol is claimed without a corresponding UEFI or extlinux test log.
-
-## Release Claim Rule
-
-Release notes may claim only paths with passing hardware logs. Untested paths
-must remain explicitly unsupported or unclaimed, even if the equivalent generic
-QEMU scenario passes.

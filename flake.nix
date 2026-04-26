@@ -30,6 +30,7 @@
     // {
       nixosModules = rec {
         rockpro64 = import ./nix/nixosModules/rockpro64.nix {inherit self;};
+        rockpro64Bootable = import ./nix/nixosModules/rockpro64-bootable.nix {inherit self;};
         default = rockpro64;
       };
     };

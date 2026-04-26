@@ -173,8 +173,8 @@
     setenv bootswain_expected_compatible pine64,rockpro64
     setenv bootswain_expected_compatible_v2_1 pine64,rockpro64-v2.1
 
-    setenv bootswain_boot_target_emmc mmc1
-    setenv bootswain_boot_target_sd mmc0
+    setenv bootswain_boot_target_emmc mmc0
+    setenv bootswain_boot_target_sd mmc1
     setenv bootswain_boot_target_usb usb0
     setenv bootswain_boot_target_nvme nvme0
     setenv bootswain_boot_prepare_emmc 'true'
@@ -182,10 +182,10 @@
     setenv bootswain_boot_prepare_usb 'usb start; true'
     setenv bootswain_boot_prepare_nvme 'pci enum; nvme scan; true'
     setenv bootswain_boot_auto 'if run bootswain_boot_emmc; then true; elif run bootswain_boot_sd; then true; elif run bootswain_boot_usb; then true; elif run bootswain_boot_nvme; then true; else echo "No bootable media"; false; fi'
-    setenv bootswain_boot_emmc 'run bootswain_boot_prepare_emmc; echo "Scanning eMMC bootflows"; if bootflow scan -lb ''${bootswain_boot_target_emmc}; then true; else echo "No bootable media on eMMC"; false; fi'
-    setenv bootswain_boot_sd 'run bootswain_boot_prepare_sd; echo "Scanning SD bootflows"; if bootflow scan -lb ''${bootswain_boot_target_sd}; then true; else echo "No bootable media on SD"; false; fi'
-    setenv bootswain_boot_usb 'run bootswain_boot_prepare_usb; echo "Scanning USB bootflows"; if bootflow scan -lb ''${bootswain_boot_target_usb}; then true; else echo "No bootable media on USB"; false; fi'
-    setenv bootswain_boot_nvme 'run bootswain_boot_prepare_nvme; echo "Scanning NVMe bootflows"; if bootflow scan -lb ''${bootswain_boot_target_nvme}; then true; else echo "No bootable media on NVMe"; false; fi'
+    setenv bootswain_boot_emmc 'run bootswain_boot_prepare_emmc; echo "Scanning eMMC bootflows"; bootflow scan -lb ''${bootswain_boot_target_emmc}; echo "No bootable media on eMMC"; false'
+    setenv bootswain_boot_sd 'run bootswain_boot_prepare_sd; echo "Scanning SD bootflows"; bootflow scan -lb ''${bootswain_boot_target_sd}; echo "No bootable media on SD"; false'
+    setenv bootswain_boot_usb 'run bootswain_boot_prepare_usb; echo "Scanning USB bootflows"; bootflow scan -lb ''${bootswain_boot_target_usb}; echo "No bootable media on USB"; false'
+    setenv bootswain_boot_nvme 'run bootswain_boot_prepare_nvme; echo "Scanning NVMe bootflows"; bootflow scan -lb ''${bootswain_boot_target_nvme}; echo "No bootable media on NVMe"; false'
 
     setenv bootswain_check_board 'echo "Checking ROCKPro64 board identity"; if fdt addr ''${fdtcontroladdr}; then if fdt get value bootswain_detected_compatible / compatible; then if test "''${bootswain_detected_compatible}" = "''${bootswain_expected_compatible}"; then true; else if test "''${bootswain_detected_compatible}" = "''${bootswain_expected_compatible_v2_1}"; then true; else echo "Unexpected board compatible: ''${bootswain_detected_compatible}"; false; fi; fi; else echo "Unable to read control FDT compatible"; false; fi; else echo "Unable to access control FDT"; false; fi'
     setenv bootswain_probe_spi 'echo "Probing SPI flash"; if sf probe; then if test -n "''${sf_size}"; then if test "''${sf_size}" = "''${bootswain_spi_size}"; then true; else echo "Unexpected SPI size: ''${sf_size}"; false; fi; else echo "SPI size variable unavailable; continuing with configured 16 MiB bound"; true; fi; else echo "SPI probe failed"; false; fi'
@@ -226,7 +226,7 @@
   rockpro64ReleaseCandidate = "${rockpro64UbootVersion}-rockpro64-rc.0";
   rockpro64StableRelease = "${rockpro64UbootVersion}-rockpro64-stable.0";
   rockpro64ExperimentalRelease = "${rockpro64UbootVersion}-rockpro64-experimental.0";
-  rockpro64StableValidationRecord = "docs/rockpro64-stable-spi-usb-validation.md";
+  rockpro64StableValidationRecord = "docs/src/validation/stable-evidence.md";
   stableEvidenceDir = "${validationDir}/rockpro64/stable";
   requiredStableScenarios = [
     "spi-installer-menu"

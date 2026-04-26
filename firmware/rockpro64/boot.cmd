@@ -14,8 +14,8 @@ setenv bootswain_ready_message 'ROCKPro64 release-candidate installer ready'
 setenv bootswain_bootmenu_delay 5
 setenv bootswain_boot_scan_policy manual
 
-setenv bootswain_boot_target_emmc mmc1
-setenv bootswain_boot_target_sd mmc0
+setenv bootswain_boot_target_emmc mmc0
+setenv bootswain_boot_target_sd mmc1
 setenv bootswain_boot_target_usb usb0
 setenv bootswain_boot_target_nvme nvme0
 

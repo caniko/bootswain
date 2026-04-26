@@ -1,18 +1,18 @@
 # Generic ARM64 QEMU Validation
 
 `bootswain validate qemu-arm64` is a host-side smoke runner for generic ARM64
-U-Boot behavior under QEMU `virt`. It is not a ROCKPro64 emulator and it must
-not be used as evidence for RK3399 SPL/TPL/TF-A, SPI flash, eMMC wiring, PCIe,
-or board-specific boot behavior.
+U-Boot behavior under QEMU `virt`. It is not a ROCKPro64 emulator and must not
+be used as evidence for RK3399 SPL/TPL/TF-A, SPI flash, eMMC wiring, PCIe, or
+board-specific boot behavior.
 
-Local baseline used for this scaffold:
+Local baseline:
 
 - QEMU binary: `qemu-system-aarch64`
 - Machine: `virt`
 - Useful synthetic storage devices: virtio block, USB storage, and NVMe
-- Unsupported by QEMU in this workflow: `rockpro64` or `rk3399` machine models
+- Unsupported by this workflow: `rockpro64` or `rk3399` machine models
 
-## Fixture
+## Fixtures
 
 The generic validation fixture is:
 
@@ -79,15 +79,6 @@ bootswain validate qemu-arm64 \
 
 Supported `--disk-interface` values are `virtio`, `usb-storage`, and `nvme`.
 
-The flake check runs the real prompt smoke automatically:
-
-```sh
-nix flake check
-```
-
-## Release Claim Rule
-
 Passing QEMU validation means only that generic ARM64 U-Boot command handling,
-serial log capture, timeout handling, and `bootswain` validation reporting work.
-ROCKPro64 support still requires a hardware validation run using the
-ROCKPro64 lab plan.
+serial log capture, timeout handling, and bootswain validation reporting work.
+ROCKPro64 support still requires a hardware validation run.
