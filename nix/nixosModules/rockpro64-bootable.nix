@@ -11,6 +11,7 @@
     nixpkgs.hostPlatform = lib.mkDefault "aarch64-linux";
 
     boot.bootswain.rockpro64.enable = lib.mkDefault true;
+    boot.bootswain.rockpro64.osBootProtocol = lib.mkDefault "extlinux";
     boot.loader.grub.enable = lib.mkDefault false;
     boot.loader.systemd-boot.enable = lib.mkDefault false;
     boot.loader.generic-extlinux-compatible.enable = lib.mkDefault true;

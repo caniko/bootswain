@@ -5,7 +5,16 @@
   ...
 }: let
   cfg = config.boot.bootswain.rockpro64;
+  effectiveOsBootProtocol =
+    if cfg.installExtlinux == null
+    then cfg.osBootProtocol
+    else if cfg.installExtlinux
+    then "extlinux"
+    else "efi";
+  usesEfi = effectiveOsBootProtocol == "efi";
+  usesExtlinux = effectiveOsBootProtocol == "extlinux";
   defaultFirmwarePackage = self.packages.${pkgs.stdenv.hostPlatform.system}.rockpro64-spi-firmware;
+  removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
   bootFiles = pkgs.runCommand "bootswain-rockpro64-boot-files" {} ''
     mkdir -p "$out/boot"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot.scr.uimg"
@@ -25,11 +34,20 @@ in {
       '';
     };
 
-    installExtlinux = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
+    osBootProtocol = lib.mkOption {
+      type = lib.types.enum ["efi" "extlinux" "none"];
+      default = "efi";
       description = ''
-        Whether to enable NixOS' generic extlinux-compatible bootloader defaults.
+        Operating-system boot protocol that bootswain prepares for ROCKPro64.
+        EFI is the first-class path; extlinux remains available as an explicit fallback.
+      '';
+    };
+
+    installExtlinux = lib.mkOption {
+      type = lib.types.nullOr lib.types.bool;
+      default = null;
+      description = ''
+        Deprecated compatibility option. Use boot.bootswain.rockpro64.osBootProtocol instead.
       '';
     };
 
@@ -44,8 +62,19 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    warnings = lib.optional (cfg.installExtlinux != null) ''
+      boot.bootswain.rockpro64.installExtlinux is deprecated; use
+      boot.bootswain.rockpro64.osBootProtocol = "${effectiveOsBootProtocol}" instead.
+    '';
+
     boot.loader.grub.enable = lib.mkDefault false;
-    boot.loader.generic-extlinux-compatible.enable = lib.mkIf cfg.installExtlinux (lib.mkDefault true);
+    boot.loader.generic-extlinux-compatible.enable = lib.mkIf usesExtlinux (lib.mkDefault true);
+    boot.loader.systemd-boot.enable = lib.mkIf usesEfi (lib.mkDefault true);
+    boot.loader.efi.canTouchEfiVariables = lib.mkIf usesEfi (lib.mkDefault false);
+    boot.loader.efi.efiSysMountPoint = lib.mkIf usesEfi (lib.mkDefault cfg.bootMountPoint);
+    boot.loader.systemd-boot.extraFiles = lib.mkIf usesEfi {
+      "EFI/BOOT/BOOTAA64.EFI" = lib.mkDefault removableEfiLoader;
+    };
 
     system.build.bootswainRockpro64BootFiles = bootFiles;
 
@@ -62,6 +91,10 @@ in {
         install -m 0644 ${bootFiles}/boot/boot.scr.uimg "$bootswain_boot_mount/boot/boot.scr.uimg"
         install -m 0644 ${bootFiles}/u-boot-rockchip-spi.bin "$bootswain_boot_mount/u-boot-rockchip-spi.bin"
         install -m 0644 ${bootFiles}/boot/u-boot-rockchip-spi.bin "$bootswain_boot_mount/boot/u-boot-rockchip-spi.bin"
+        ${lib.optionalString usesEfi ''
+          mkdir -p "$bootswain_boot_mount/EFI/BOOT"
+          install -m 0644 ${removableEfiLoader} "$bootswain_boot_mount/EFI/BOOT/BOOTAA64.EFI"
+        ''}
       '';
     };
   };

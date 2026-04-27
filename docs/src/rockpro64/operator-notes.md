@@ -57,8 +57,11 @@ partitions. The boot command `bootflow scan -lb <label>` is what the firmware
 menu should use for actual boot attempts.
 
 A `bootflow scan -b` command may return to the script after listing zero valid
-flows. If control returns to bootswain after a booting scan, treat that path as
-not booted and continue fallback or return to the menu.
+flows, even when `/EFI/BOOT/BOOTAA64.EFI` is present and direct `bootefi` works.
+If control returns to bootswain after a booting scan, treat that path as not
+booted and continue fallback or return to the menu. The installed NixOS handoff
+therefore attempts bootflow first, then directly loads the removable EFI binary
+from the known ESP partition and runs `bootefi`.
 
 ## EFI vs Extlinux
 
@@ -70,15 +73,18 @@ NixOS normally expects exactly one bootloader installer for a system closure.
 - Use `boot.loader.generic-extlinux-compatible.enable = true` when the target
   should expose `/boot/extlinux/extlinux.conf`.
 
-For an eMMC GPT with a VFAT ESP mounted at `/boot`, EFI/systemd-boot is
-appropriate and bootswain's extlinux integration should be disabled:
+For an eMMC GPT with a VFAT ESP mounted at `/boot`, EFI/systemd-boot is the
+first-class path:
 
 ```nix
 boot.bootswain.rockpro64 = {
   enable = true;
-  installExtlinux = false;
+  osBootProtocol = "efi";
 };
 ```
+
+Use `osBootProtocol = "extlinux"` only for images that intentionally expose an
+extlinux bootflow.
 
 ## Useful Serial Checks
 
@@ -91,6 +97,8 @@ mmc dev 0
 mmc part
 fatls mmc 0:1 /
 fatls mmc 0:1 /EFI/BOOT
+fatload mmc 0:1 ${kernel_addr_r} /EFI/BOOT/BOOTAA64.EFI
+bootefi ${kernel_addr_r} ${fdtcontroladdr}
 bootflow scan -ale mmc0
 bootflow scan -lb mmc0
 ```
