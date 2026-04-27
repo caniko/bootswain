@@ -177,6 +177,8 @@
     setenv bootswain_boot_target_sd mmc1
     setenv bootswain_boot_target_usb usb0
     setenv bootswain_boot_target_nvme nvme0
+    setenv bootswain_boot_os_bootmeths "extlinux efi"
+    setenv bootswain_prepare_os_bootmeths 'echo "Selecting OS boot methods: ''${bootswain_boot_os_bootmeths}"; bootmeth order "''${bootswain_boot_os_bootmeths}"'
     setenv bootswain_boot_prepare_emmc 'true'
     setenv bootswain_boot_prepare_sd 'true'
     setenv bootswain_boot_prepare_usb 'usb start; true'
@@ -201,10 +203,10 @@
     echo "SPI payload fallback: ''${bootswain_spi_image_fallback}"
     echo "SPI payload source: ''${bootswain_spi_source_devtype} ''${bootswain_spi_source_devnum}:''${bootswain_spi_source_bootpart}"
     if run bootswain_update_spi_if_needed; then
-    	run bootswain_boot_auto
+    	if run bootswain_prepare_os_bootmeths; then run bootswain_boot_auto; else echo "Failed to select OS boot methods"; false; fi
     else
     	echo "bootswain SPI update failed; continuing normal boot scan"
-    	run bootswain_boot_auto
+    	if run bootswain_prepare_os_bootmeths; then run bootswain_boot_auto; else echo "Failed to select OS boot methods"; false; fi
     fi
   '';
   rockpro64NixosUpdaterBootScript = mkBootScript {
