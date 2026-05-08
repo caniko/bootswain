@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  crossbowCrossPkgs ? null,
   ...
 }: let
   cfg = config.boot.bootswain.rockpro64;
@@ -13,7 +14,11 @@
     else "efi";
   usesEfi = effectiveOsBootProtocol == "efi";
   usesExtlinux = effectiveOsBootProtocol == "extlinux";
-  defaultFirmwarePackage = self.packages.${pkgs.stdenv.buildPlatform.system}.rockpro64-spi-firmware;
+  firmwarePackageSystem =
+    if crossbowCrossPkgs != null
+    then crossbowCrossPkgs.stdenv.buildPlatform.system
+    else pkgs.stdenv.hostPlatform.system;
+  defaultFirmwarePackage = self.packages.${firmwarePackageSystem}.rockpro64-spi-firmware;
   removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
   nixosDtb = "rockchip/rk3399-rockpro64.dtb";
   nixosDtbPath = "${config.hardware.deviceTree.package}/${nixosDtb}";
