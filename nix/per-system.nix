@@ -5,6 +5,8 @@
   rs-harbor,
   rust-overlay,
   system,
+  macosSdkStorePath ? null,
+  osxSdkVersion ? "26.1",
 }: let
   pkgs = import nixpkgs {
     inherit system;
@@ -20,7 +22,12 @@
   };
   lib = pkgs.lib;
   toolchain = rs-harbor.lib.mkToolchain {inherit pkgs;};
-  cross = rs-harbor.lib.mkCross {inherit pkgs system;};
+  cross = rs-harbor.lib.mkCross ({
+      inherit pkgs system osxSdkVersion;
+    }
+    // lib.optionalAttrs (macosSdkStorePath != null) {
+      inherit macosSdkStorePath;
+    });
   craneLib = toolchain.craneLib;
   workspaceRoot = toString root;
   src = lib.cleanSourceWith {
@@ -94,23 +101,22 @@
           )
         ];
       };
-    bootableConfig =
-      nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          self.nixosModules.rockpro64Bootable
-          (
-            {...}: {
-              boot.bootswain.rockpro64.firmwarePackage = fakeFirmwarePackage;
-              fileSystems."/" = {
-                device = "none";
-                fsType = "tmpfs";
-              };
-              system.stateVersion = "26.05";
-            }
-          )
-        ];
-      };
+    bootableConfig = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        self.nixosModules.rockpro64Bootable
+        (
+          {...}: {
+            boot.bootswain.rockpro64.firmwarePackage = fakeFirmwarePackage;
+            fileSystems."/" = {
+              device = "none";
+              fsType = "tmpfs";
+            };
+            system.stateVersion = "26.05";
+          }
+        )
+      ];
+    };
     currentSystemConfig = mkTestSystem system;
     aarch64Config = mkTestSystem "aarch64-linux";
     aarch64EvalSummary = pkgs.writeText "bootswain-rockpro64-aarch64-nixos-eval.txt" ''
@@ -122,6 +128,26 @@
       }
       extlinux=${
         if aarch64Config.config.boot.loader.generic-extlinux-compatible.enable
+        then "true"
+        else "false"
+      }
+      systemdBoot=${
+        if aarch64Config.config.boot.loader.systemd-boot.enable
+        then "true"
+        else "false"
+      }
+      rockpro64DtbExists=${
+        if builtins.pathExists "${aarch64Config.config.hardware.deviceTree.package}/rockchip/rk3399-rockpro64.dtb"
+        then "true"
+        else "false"
+      }
+      rockpro64DtbActivation=${
+        if lib.hasInfix "dtbs/rockchip/rk3399-rockpro64.dtb" aarch64Config.config.system.activationScripts.bootswainRockpro64BootFiles.text
+        then "true"
+        else "false"
+      }
+      rebootUsbCommand=${
+        if lib.any (pkg: lib.hasInfix "bootswain-reboot-usb" (toString pkg)) aarch64Config.config.environment.systemPackages
         then "true"
         else "false"
       }
@@ -146,7 +172,11 @@
 
       grep -q '^bootFiles=bootswain-rockpro64-boot-files$' ${aarch64EvalSummary}
       grep -q '^grub=false$' ${aarch64EvalSummary}
-      grep -q '^extlinux=true$' ${aarch64EvalSummary}
+      grep -q '^extlinux=false$' ${aarch64EvalSummary}
+      grep -q '^systemdBoot=true$' ${aarch64EvalSummary}
+      grep -q '^rockpro64DtbExists=true$' ${aarch64EvalSummary}
+      grep -q '^rockpro64DtbActivation=true$' ${aarch64EvalSummary}
+      grep -q '^rebootUsbCommand=true$' ${aarch64EvalSummary}
       grep -q '^bootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
       grep -q '^bootableEnabled=true$' ${aarch64EvalSummary}
       grep -q '^bootableConsole=.*console=ttyS2,115200n8' ${aarch64EvalSummary}

@@ -15,6 +15,31 @@
   usesExtlinux = effectiveOsBootProtocol == "extlinux";
   defaultFirmwarePackage = self.packages.${pkgs.stdenv.hostPlatform.system}.rockpro64-spi-firmware;
   removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
+  nixosDtb = "rockchip/rk3399-rockpro64.dtb";
+  nixosDtbPath = "${config.hardware.deviceTree.package}/${nixosDtb}";
+  nextBootUsbMarker = "${cfg.bootMountPoint}/bootswain/next-boot-usb";
+  rebootUsbCommand = pkgs.writeShellApplication {
+    name = "bootswain-reboot-usb";
+    runtimeInputs = [
+      pkgs.coreutils
+      config.systemd.package
+    ];
+    text = ''
+      marker=${lib.escapeShellArg nextBootUsbMarker}
+      marker_dir=$(dirname "$marker")
+
+      if [ "$(id -u)" -ne 0 ]; then
+        echo "bootswain-reboot-usb must be run as root" >&2
+        exit 1
+      fi
+
+      mkdir -p "$marker_dir"
+      : > "$marker"
+      sync "$marker"
+      sync
+      systemctl reboot
+    '';
+  };
   bootFiles = pkgs.runCommand "bootswain-rockpro64-boot-files" {} ''
     mkdir -p "$out/boot"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot.scr.uimg"
@@ -66,7 +91,6 @@ in {
       boot.bootswain.rockpro64.installExtlinux is deprecated; use
       boot.bootswain.rockpro64.osBootProtocol = "${effectiveOsBootProtocol}" instead.
     '';
-
     boot.loader.grub.enable = lib.mkDefault false;
     boot.loader.generic-extlinux-compatible.enable = lib.mkIf usesExtlinux (lib.mkDefault true);
     boot.loader.systemd-boot.enable = lib.mkIf usesEfi (lib.mkDefault true);
@@ -77,6 +101,7 @@ in {
     };
 
     system.build.bootswainRockpro64BootFiles = bootFiles;
+    environment.systemPackages = [rebootUsbCommand];
 
     system.activationScripts.bootswainRockpro64BootFiles = {
       deps = ["specialfs"];
@@ -93,7 +118,9 @@ in {
         install -m 0644 ${bootFiles}/boot/u-boot-rockchip-spi.bin "$bootswain_boot_mount/boot/u-boot-rockchip-spi.bin"
         ${lib.optionalString usesEfi ''
           mkdir -p "$bootswain_boot_mount/EFI/BOOT"
+          mkdir -p "$bootswain_boot_mount/dtbs/rockchip"
           install -m 0644 ${removableEfiLoader} "$bootswain_boot_mount/EFI/BOOT/BOOTAA64.EFI"
+          install -m 0644 ${nixosDtbPath} "$bootswain_boot_mount/dtbs/${nixosDtb}"
         ''}
       '';
     };

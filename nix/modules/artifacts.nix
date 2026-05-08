@@ -181,11 +181,18 @@
     setenv bootswain_prepare_os_bootmeths 'echo "Selecting OS boot methods: ''${bootswain_boot_os_bootmeths}"; bootmeth order "''${bootswain_boot_os_bootmeths}"'
     setenv bootswain_efi_loader /EFI/BOOT/BOOTAA64.EFI
     setenv bootswain_efi_bootpart 1
+    setenv bootswain_next_boot_usb_devtype mmc
+    setenv bootswain_next_boot_usb_devnum 0
+    setenv bootswain_next_boot_usb_bootpart 1
+    setenv bootswain_next_boot_usb_marker /bootswain/next-boot-usb
     setenv bootswain_boot_prepare_emmc 'true'
     setenv bootswain_boot_prepare_sd 'true'
     setenv bootswain_boot_prepare_usb 'usb start; true'
     setenv bootswain_boot_prepare_nvme 'pci enum; nvme scan; true'
-    setenv bootswain_boot_auto 'if run bootswain_boot_emmc; then true; elif run bootswain_boot_sd; then true; elif run bootswain_boot_usb; then true; elif run bootswain_boot_nvme; then true; else echo "No bootable media"; false; fi'
+    setenv bootswain_boot_normal_order 'if run bootswain_boot_emmc; then true; elif run bootswain_boot_sd; then true; elif run bootswain_boot_usb; then true; elif run bootswain_boot_nvme; then true; else echo "No bootable media"; false; fi'
+    setenv bootswain_boot_usb_oneshot_order 'if run bootswain_boot_usb; then true; elif run bootswain_boot_emmc; then true; elif run bootswain_boot_sd; then true; elif run bootswain_boot_nvme; then true; else echo "No bootable media"; false; fi'
+    setenv bootswain_consume_next_boot_usb 'if fatls ''${bootswain_next_boot_usb_devtype} ''${bootswain_next_boot_usb_devnum}:''${bootswain_next_boot_usb_bootpart} ''${bootswain_next_boot_usb_marker}; then echo "Consuming one-shot USB boot marker"; if fatrm ''${bootswain_next_boot_usb_devtype} ''${bootswain_next_boot_usb_devnum}:''${bootswain_next_boot_usb_bootpart} ''${bootswain_next_boot_usb_marker}; then true; else echo "Failed to remove one-shot USB boot marker"; false; fi; else false; fi'
+    setenv bootswain_boot_auto 'if run bootswain_consume_next_boot_usb; then echo "One-shot USB boot requested"; run bootswain_boot_usb_oneshot_order; else run bootswain_boot_normal_order; fi'
     setenv bootswain_boot_direct_efi 'echo "Trying direct EFI handoff"; echo "EFI target: ''${bootswain_efi_target}"; echo "EFI device: ''${bootswain_efi_devtype} ''${bootswain_efi_devnum}:''${bootswain_efi_bootpart}"; echo "EFI loader: ''${bootswain_efi_loader}"; bootmeth list -a; if fatls ''${bootswain_efi_devtype} ''${bootswain_efi_devnum}:''${bootswain_efi_bootpart} /EFI/BOOT; then true; else echo "Unable to list /EFI/BOOT on ''${bootswain_efi_devtype} ''${bootswain_efi_devnum}:''${bootswain_efi_bootpart}"; false; fi; if fatload ''${bootswain_efi_devtype} ''${bootswain_efi_devnum}:''${bootswain_efi_bootpart} ''${kernel_addr_r} ''${bootswain_efi_loader}; then echo "Loaded EFI payload size ''${filesize}"; if test -n "''${fdtcontroladdr}"; then bootefi ''${kernel_addr_r} ''${fdtcontroladdr}; else bootefi ''${kernel_addr_r}; fi; else echo "Failed to load ''${bootswain_efi_loader}"; false; fi'
     setenv bootswain_boot_emmc 'run bootswain_boot_prepare_emmc; echo "Scanning eMMC bootflows"; if bootflow scan -lb ''${bootswain_boot_target_emmc}; then true; else echo "No bootable eMMC bootflow; trying direct EFI"; setenv bootswain_efi_target ''${bootswain_boot_target_emmc}; setenv bootswain_efi_devtype mmc; setenv bootswain_efi_devnum 0; setenv bootswain_efi_bootpart 1; run bootswain_boot_direct_efi; fi'
     setenv bootswain_boot_sd 'run bootswain_boot_prepare_sd; echo "Scanning SD bootflows"; if bootflow scan -lb ''${bootswain_boot_target_sd}; then true; else echo "No bootable SD bootflow; trying direct EFI"; setenv bootswain_efi_target ''${bootswain_boot_target_sd}; setenv bootswain_efi_devtype mmc; setenv bootswain_efi_devnum 1; setenv bootswain_efi_bootpart 1; run bootswain_boot_direct_efi; fi'
@@ -565,6 +572,8 @@
         },
         "boot_policy": {
           "default_order": ["emmc", "sd", "usb", "nvme"],
+          "one_shot_usb_order": ["usb", "emmc", "sd", "nvme"],
+          "one_shot_usb_marker": "/boot/bootswain/next-boot-usb",
           "preferred_protocols": ["uefi", "extlinux"],
           "no_bootable_media_behavior": "show boot menu, diagnostics, and U-Boot shell over 115200 serial"
         },
@@ -1009,6 +1018,9 @@
     grep -q 'Updating SPI firmware from bootswain NixOS payload' ${rockpro64Uboot}/nixos-updater.boot.cmd
     grep -q 'Continuing boot with current SPI firmware' ${rockpro64Uboot}/nixos-updater.boot.cmd
     grep -q 'run bootswain_boot_auto' ${rockpro64Uboot}/nixos-updater.boot.cmd
+    grep -q '/bootswain/next-boot-usb' ${rockpro64Uboot}/nixos-updater.boot.cmd
+    grep -q 'fatrm ''${bootswain_next_boot_usb_devtype} ''${bootswain_next_boot_usb_devnum}:''${bootswain_next_boot_usb_bootpart} ''${bootswain_next_boot_usb_marker}' ${rockpro64Uboot}/nixos-updater.boot.cmd
+    grep -q 'bootswain_boot_usb_oneshot_order.*bootswain_boot_usb.*bootswain_boot_emmc.*bootswain_boot_sd.*bootswain_boot_nvme' ${rockpro64Uboot}/nixos-updater.boot.cmd
     grep -a -q 'Comparing installed SPI firmware' ${rockpro64Uboot}/nixos-updater.boot.scr.uimg
     grep -q 'Continue boot=' ${rockpro64Uboot}/boot.cmd
     grep -q 'Rescan detected boot options' ${rockpro64Uboot}/generic-boot-menu.cmd
@@ -1020,6 +1032,7 @@
     grep -q 'CONFIG_AUTOBOOT_USE_MENUKEY=y' ${rockpro64Uboot}/u-boot.config.fragment
     grep -q 'CONFIG_AUTOBOOT_MENUKEY=27' ${rockpro64Uboot}/u-boot.config.fragment
     grep -q 'CONFIG_CMD_SLEEP=y' ${rockpro64Uboot}/u-boot.config.fragment
+    grep -q 'CONFIG_FAT_WRITE=y' ${rockpro64Uboot}/u-boot.config.fragment
     grep -q 'preboot=echo "Press ESC during autoboot to enter the bootswain boot menu"' ${rockpro64Uboot}/uboot.env
     grep -q 'bootswain_status=release-candidate' ${rockpro64Uboot}/uboot.env
     grep -q 'bootswain_release_channel=release-candidate' ${rockpro64Uboot}/uboot.env
@@ -1028,6 +1041,8 @@
     grep -a -q 'SPI verify complete' ${rockpro64Uboot}/installer-u-boot.itb
     grep -a -q 'SPI flashing is available only from the installer image' ${rockpro64Uboot}/firmware-u-boot.itb
     grep -q '"default_order": \["emmc", "sd", "usb", "nvme"\]' ${rockpro64ReleaseBundle}/release.json
+    grep -q '"one_shot_usb_order": \["usb", "emmc", "sd", "nvme"\]' ${rockpro64ReleaseBundle}/release.json
+    grep -q '"one_shot_usb_marker": "/boot/bootswain/next-boot-usb"' ${rockpro64ReleaseBundle}/release.json
     grep -q 'spi.installer.img' ${rockpro64ReleaseBundle}/sha256sums.txt
     grep -q 'shared.disk-image.img' ${rockpro64ReleaseBundle}/sha256sums.txt
     grep -q 'release-notes.md' ${rockpro64ReleaseBundle}/sha256sums.txt

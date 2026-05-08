@@ -63,6 +63,26 @@ booted and continue fallback or return to the menu. The installed NixOS handoff
 therefore attempts bootflow first, then directly loads the removable EFI binary
 from the known ESP partition and runs `bootefi`.
 
+## One-Shot USB Boot
+
+The installed NixOS handoff normally scans `eMMC -> SD -> USB -> NVMe`. To boot
+USB first for one reboot, create this marker on the eMMC ESP before rebooting:
+
+```text
+/boot/bootswain/next-boot-usb
+```
+
+The NixOS module provides the helper:
+
+```text
+sudo bootswain-reboot-usb
+```
+
+U-Boot checks `mmc 0:1` for `/bootswain/next-boot-usb`, removes the marker with
+`fatrm`, then scans `USB -> eMMC -> SD -> NVMe`. If the marker cannot be
+removed, bootswain falls back to the normal boot order to avoid a persistent USB
+boot loop.
+
 ## EFI vs Extlinux
 
 U-Boot can support both EFI and extlinux boot methods at the firmware level.
