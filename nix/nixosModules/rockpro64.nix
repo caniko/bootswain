@@ -13,7 +13,7 @@
     else "efi";
   usesEfi = effectiveOsBootProtocol == "efi";
   usesExtlinux = effectiveOsBootProtocol == "extlinux";
-  defaultFirmwarePackage = self.packages.${pkgs.stdenv.hostPlatform.system}.rockpro64-spi-firmware;
+  defaultFirmwarePackage = self.packages.${pkgs.stdenv.buildPlatform.system}.rockpro64-spi-firmware;
   removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
   nixosDtb = "rockchip/rk3399-rockpro64.dtb";
   nixosDtbPath = "${config.hardware.deviceTree.package}/${nixosDtb}";
@@ -40,7 +40,7 @@
       systemctl reboot
     '';
   };
-  bootFiles = pkgs.runCommand "bootswain-rockpro64-boot-files" {} ''
+  bootFiles = pkgs.buildPackages.runCommand "bootswain-rockpro64-boot-files" {} ''
     mkdir -p "$out/boot"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot.scr.uimg"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot/boot.scr.uimg"
