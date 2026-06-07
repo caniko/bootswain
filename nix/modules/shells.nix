@@ -8,6 +8,8 @@
       pkgs.zstd
     ];
     packages = [
+      pkgs.cargo-audit
+      pkgs.cargo-deny
       pkgs.dosfstools
       pkgs.git
       pkgs.just

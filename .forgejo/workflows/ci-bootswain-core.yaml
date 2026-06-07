@@ -29,5 +29,26 @@ jobs:
       - name: Test
         run: nix develop -c cargo test -p bootswain-core
 
+      - name: Install cargo-audit
+        run: nix develop -c cargo install cargo-audit --locked
+
+      - name: Install cargo-deny
+        run: nix develop -c cargo install cargo-deny --locked --version 0.18.3
+
+      - name: Fetch RustSec advisory database
+        run: |
+          db="${CARGO_HOME:-$HOME/.cargo}/advisory-db"
+          rm -rf "$db"
+          mkdir -p "$(dirname "$db")"
+          git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 clone --depth 1 https://github.com/RustSec/advisory-db.git "$db"
+
+      - name: Audit dependencies
+        run: |
+          db="${CARGO_HOME:-$HOME/.cargo}/advisory-db"
+          nix develop -c cargo audit --db "$db" --no-fetch --stale
+
+      - name: Deny dependency policy
+        run: nix develop -c cargo deny check bans licenses sources
+
       - name: Clippy
         run: nix develop -c cargo clippy -p bootswain-core --all-targets -- --deny warnings

@@ -2,3 +2,5 @@
 runtime = "nix"
 runner = "atlas-nix-trusted"
 workspace = true
+with_audit = true
+with_deny = true
