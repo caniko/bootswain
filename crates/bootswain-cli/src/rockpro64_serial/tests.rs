@@ -1,4 +1,3 @@
-
 use super::{
     RockPro64SerialRunConfig, rockpro64_serial_selected_outcomes_passed,
     run_rockpro64_serial_validation_with_session,
