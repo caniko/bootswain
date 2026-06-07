@@ -1,170 +1,146 @@
 # Bootswain
 
-`bootswain` is a Rust workspace for repeatable ROCKPro64-first flash, probe,
-and firmware packaging workflows around stock U-Boot. ROCKPro64 firmware
-artifacts are release candidates until real hardware evidence is imported under
-`validation/rockpro64/stable/`; stable support claims are not emitted by the
-default release bundle.
+`bootswain` is a Rust workspace for repeatable host-side board flashing,
+firmware inspection, serial probing, and validation workflows around U-Boot.
+The current focus is ROCKPro64 firmware work, with Raspberry Pi 3 B+ boot
+partition tooling also present as release-candidate support.
 
-It replaces the manual host steps we have been using for:
+The project is intentionally evidence-gated: release-candidate artifacts are
+easy to build and inspect, but stable support claims require real validation
+data under `validation/<board>/stable/`.
 
-- inspecting installer and firmware artifacts
-- flashing SD media safely
-- capturing serial logs
-- running the ROCKPro64 USB probe sequence reproducibly
-- packaging real RK3399 U-Boot, TF-A, SPI installer, and shared-storage images
-  in Nix
+## What It Does
 
-## Current scope
+- Inspect raw and zstd-compressed image artifacts.
+- Flash SD or removable block devices with dry-run and verification modes.
+- Run reproducible ROCKPro64 USB and serial validation flows.
+- Package ROCKPro64 RK3399 U-Boot, TF-A, SPI installer, and shared-storage
+  images with Nix.
+- Package a Raspberry Pi 3 B+ FAT boot partition image with Raspberry Pi
+  firmware, DTB, and U-Boot.
+- Expose NixOS modules for board boot-file installation and bootable profiles.
 
-V1 is intentionally narrow:
+## Status
 
-- Linux-only
-- path-based inputs for images and serial ports
-- built-in ROCKPro64 support only
-- release-candidate flashing is enabled for the SPI installer target
-- shared-storage image flashing remains gated until SD/eMMC validation evidence
-  is imported
+ROCKPro64 is the primary target. The SPI installer target is flashable as a
+release candidate; shared-storage image flashing remains gated unless the
+operator explicitly allows non-flashable artifacts for lab work.
 
-The first probe flow matches the investigation protocol already used in
-Tow-Boot:
+Raspberry Pi 3 B+ support currently produces a release-candidate boot partition
+image. It does not claim stable support until validation evidence is imported
+under `validation/raspberrypi3bplus/stable/`.
 
-1. wait for the U-Boot prompt
-2. run `usb start`
-3. run `usb tree`
-4. run `usb reset`
-5. run `usb tree`
-6. write raw logs plus machine-readable JSON results
+## Quick Start
 
-## ROCKPro64 UART caveat
+Enter the development shell:
 
-ROCKPro64 serial wiring can interfere with power-on if board RX is connected too
-early.
+```sh
+nix develop
+```
 
-Use this as the default operator baseline while probing:
+Build and test the workspace:
 
-- connect only `GND` + board `TX` during power-on
-- leave board `RX` / pin 10 disconnected until U-Boot is already up
-- use `115200` unless you deliberately test a different serial policy
+```sh
+cargo build --workspace
+cargo test --workspace
+```
 
-## Commands
+Run the flake checks:
+
+```sh
+nix flake check
+```
+
+List Nix-built flash targets:
+
+```sh
+nix run .#flash -- --list-targets
+```
+
+Dry-run a ROCKPro64 SPI installer flash:
+
+```sh
+nix run .#flash -- \
+  --target rockpro64-spi-installer \
+  --device /dev/sdX \
+  --dry-run
+```
+
+Dry-run a Raspberry Pi 3 B+ boot partition flash:
+
+```sh
+nix run .#flash -- \
+  --target raspberrypi3bplus-boot-partition \
+  --device /dev/sdX \
+  --dry-run
+```
+
+## CLI Examples
 
 Inspect an image:
 
 ```sh
-bootswain image inspect --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img
+bootswain image inspect --image /path/to/spi.installer.img
 ```
 
 Inspect an image with JSON output:
 
 ```sh
 bootswain image inspect \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
+  --image /path/to/spi.installer.img \
   --json
 ```
 
-Flash an SD card:
+Flash an SD card after reviewing the dry-run output:
 
 ```sh
 bootswain flash sd \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
-  --device /dev/sdb
-```
-
-Use the convenience wrapper from the dev shell:
-
-```sh
-nix develop
-just flash-targets
-just flash \
-  --target rockpro64-spi-installer \
+  --image /path/to/spi.installer.img \
   --device /dev/sdX \
   --verify
-```
-
-List the Nix-built flash targets:
-
-```sh
-nix run .#flash -- --list-targets
-```
-
-Dry-run the release-candidate ROCKPro64 SPI installer target:
-
-```sh
-nix run .#flash -- \
-  --target rockpro64-spi-installer \
-  --device /dev/sdb \
-  --dry-run
-```
-
-Validate a flash target without writing:
-
-```sh
-bootswain flash sd \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
-  --device /dev/sdb \
-  --dry-run \
-  --json
 ```
 
 Run one ROCKPro64 USB probe trial:
 
 ```sh
 bootswain probe rockpro64-usb \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
+  --image /path/to/spi.installer.img \
   --port /dev/ttyUSB0 \
   --out ./probe-output
 ```
 
-Run three cold-boot trials:
+Run the generic ARM64 QEMU smoke validator:
 
 ```sh
-bootswain probe rockpro64-usb \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
-  --port /dev/ttyUSB0 \
-  --repeat 3 \
-  --out ./probe-output
+bootswain validate qemu-arm64 \
+  --plan validation/qemu-arm64/boot-smoke.json \
+  --u-boot /path/to/u-boot.bin \
+  --qemu qemu-system-aarch64 \
+  --out ./qemu-output
 ```
 
-Adjust probe timeouts and emit JSON to stdout:
+## Nix Outputs
 
-```sh
-bootswain probe rockpro64-usb \
-  --image /tmp/result-rockpro64-stock-2026.04/spi.installer.img \
-  --port /dev/ttyUSB0 \
-  --prompt-timeout-secs 30 \
-  --command-timeout-secs 15 \
-  --json
-```
+Common outputs include:
 
-## Output
+- `.#bootswain` / `.#default`: the CLI package.
+- `.#flash`: a wrapper app for built release-candidate flash targets.
+- `.#rockpro64-release-bundle`: ROCKPro64 release-candidate bundle.
+- `.#rockpro64-release-bundle-experimental`: ROCKPro64 experimental bundle.
+- `.#raspberrypi3bplus-release-bundle`: Raspberry Pi 3 B+ release-candidate
+  bundle.
+- `nixosModules.rockpro64` and `nixosModules.rockpro64Bootable`.
+- `nixosModules.raspberryPi3BPlus` and
+  `nixosModules.raspberryPi3BPlusBootable`.
 
-Each probe run writes:
+## NixOS Integration
 
-- `summary.json` in the requested output directory
-- `trial.json` plus `serial.log` under `trial-N/` for each trial
-
-`trial.json` includes stage-level results for:
-
-- autoboot
-- `usb start`
-- `usb tree`
-- `usb reset`
-- failure stage classification
-
-The JSON files and `--json` output are the current public machine-readable
-interface.
-
-## Development
-
-## Downstream NixOS ROCKPro64 config
-
-Downstream flakes can import the bootable ROCKPro64 profile and layer their own
-filesystems, users, services, and deployment policy on top:
+Downstream flakes can import a bootable profile and layer their own filesystems,
+users, services, and deployment policy on top:
 
 ```nix
 {
-  inputs.bootswain.url = "github:caniko/bootswain";
+  inputs.bootswain.url = "git+https://codeberg.org/caniko/bootswain.git";
 
   outputs = {
     nixpkgs,
@@ -178,34 +154,62 @@ filesystems, users, services, and deployment policy on top:
         ./configuration.nix
       ];
     };
+
+    nixosConfigurations.rpi3bplus = nixpkgs.lib.nixosSystem {
+      system = "aarch64-linux";
+      modules = [
+        bootswain.nixosModules.raspberryPi3BPlusBootable
+        ./configuration.nix
+      ];
+    };
   };
 }
 ```
 
-The profile enables the bootswain ROCKPro64 integration, disables GRUB, enables
-NixOS generic extlinux output, sets `nixpkgs.hostPlatform` to `aarch64-linux`,
-and adds a serial console matching the bootswain UART policy. The lower-level
-`bootswain.nixosModules.rockpro64` module remains available when a downstream
-flake wants to opt into those settings manually.
+## Validation Evidence
 
-This repository ships a Nix flake and a Cargo workspace:
+Stable promotion is blocked until the relevant board directory contains real
+lab evidence, including the validation run, serial logs, artifact manifest, and
+exact image checksums.
+
+For ROCKPro64, stable promotion requires:
+
+- `validation/rockpro64/stable/validation-run.json`
+- serial logs for every claimed scenario
+- a successful build of `.#rockpro64-stable-release-bundle`
+
+For Raspberry Pi 3 B+, stable promotion requires equivalent evidence under:
+
+```text
+validation/raspberrypi3bplus/stable/
+```
+
+## Development
+
+The repository uses Nix for repeatable tooling and generated Forgejo CI for
+testing. The generated CI workflows run package tests and clippy through
+`nix develop`, and run `nix flake check`.
+
+Useful local commands:
 
 ```sh
 nix develop
-cargo build --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- --deny warnings
 cargo test --workspace
+nix flake check --no-build
 ```
 
-CI runs:
+Documentation lives in `docs/` and can be served with:
 
-- `cargo build`
-- `cargo test`
-- `cargo clippy -- -D warnings`
-- `cargo fmt --check`
-- `nix flake check`
+```sh
+cd docs
+mdbook serve
+```
 
-Stable ROCKPro64 promotion additionally requires:
+The website lives in `website/` and can be served with:
 
-- `validation/rockpro64/stable/validation-run.json`
-- full serial logs for every claimed scenario
-- a successful build of `.#rockpro64-stable-release-bundle`
+```sh
+cd website
+zola serve
+```

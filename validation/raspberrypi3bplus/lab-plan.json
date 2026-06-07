@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "board": "raspberry-pi-3-b-plus",
+  "release": "2026.04-raspberrypi3bplus-lab.0",
+  "executor": "deferred",
+  "scenarios": [
+    {
+      "name": "serial-u-boot-prompt",
+      "kind": "prompt",
+      "target": "sd",
+      "protocol": "u-boot-shell",
+      "artifact": "boot-partition-image",
+      "steps": [
+        {
+          "name": "wait for u-boot prompt",
+          "command": null,
+          "expect": ["U-Boot", "=> "],
+          "timeout_secs": 30
+        }
+      ]
+    },
+    {
+      "name": "sd-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "sd",
+      "protocol": "extlinux",
+      "artifact": "boot-partition-image",
+      "steps": [
+        {
+          "name": "boot extlinux from sd",
+          "command": "bootflow scan -lb mmc0",
+          "expect": ["Booting"],
+          "timeout_secs": 60
+        }
+      ]
+    },
+    {
+      "name": "usb-extlinux-boot",
+      "kind": "extlinux-boot",
+      "target": "usb",
+      "protocol": "extlinux",
+      "artifact": "boot-partition-image",
+      "steps": [
+        {
+          "name": "boot extlinux from usb",
+          "command": "usb start; bootflow scan -lb usb0",
+          "expect": ["Booting"],
+          "timeout_secs": 60
+        }
+      ]
+    }
+  ]
+}

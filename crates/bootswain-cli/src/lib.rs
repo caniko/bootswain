@@ -90,12 +90,19 @@ pub fn render_firmware_manifest_human(manifest: &FirmwareManifest) -> String {
     let _ = writeln!(
         output,
         "trusted-firmware-a: {}",
-        manifest.sources.trusted_firmware_a
+        manifest
+            .sources
+            .trusted_firmware_a
+            .as_deref()
+            .unwrap_or("not-applicable")
     );
     let _ = writeln!(
         output,
         "spi-size-bytes: {}",
-        manifest.storage_layout.spi_size_bytes
+        manifest
+            .storage_layout
+            .spi_size_bytes
+            .map_or_else(|| "not-applicable".to_owned(), |value| value.to_string())
     );
     let _ = writeln!(
         output,

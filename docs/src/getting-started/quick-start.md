@@ -42,6 +42,15 @@ nix run .#flash -- \
   --dry-run
 ```
 
+Dry-run the release-candidate Raspberry Pi 3 B+ boot partition target:
+
+```sh
+nix run .#flash -- \
+  --target raspberrypi3bplus-boot-partition \
+  --device /dev/sdb \
+  --dry-run
+```
+
 Run one ROCKPro64 USB probe trial:
 
 ```sh

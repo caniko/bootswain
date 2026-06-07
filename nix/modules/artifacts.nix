@@ -31,6 +31,9 @@
 
   qemuArm64Uboot = pkgs.pkgsCross.aarch64-multiplatform.ubootQemuAarch64;
   rockpro64TfA = pkgs.pkgsCross.aarch64-multiplatform.armTrustedFirmwareRK3399;
+  raspberryPi3BPlusUboot = pkgs.pkgsCross.aarch64-multiplatform.ubootRaspberryPi3_64bit;
+  raspberryPi3BPlusFirmware = pkgs.raspberrypifw;
+  raspberryPi3BPlusFirmwareBoot = "${raspberryPi3BPlusFirmware}/share/raspberrypi/boot";
 
   mkRenderedBootCmd = {
     name,
@@ -238,6 +241,7 @@
   rockpro64ReleaseCandidate = "${rockpro64UbootVersion}-rockpro64-rc.0";
   rockpro64StableRelease = "${rockpro64UbootVersion}-rockpro64-stable.0";
   rockpro64ExperimentalRelease = "${rockpro64UbootVersion}-rockpro64-experimental.0";
+  raspberryPi3BPlusReleaseCandidate = "${raspberryPi3BPlusUboot.version}-raspberrypi3bplus-rc.0";
   rockpro64StableValidationRecord = "docs/src/validation/stable-evidence.md";
   stableEvidenceDir = "${validationDir}/rockpro64/stable";
   requiredStableScenarios = [
@@ -938,6 +942,301 @@
     validationNote = "Experimental channel is flashable for developer lab use, but it is not a stable hardware support claim.";
   };
 
+  raspberryPi3BPlusConfigTxt = pkgs.writeText "raspberrypi3bplus-config.txt" ''
+    [pi3]
+    kernel=u-boot-rpi3.bin
+
+    # Otherwise the serial output will be garbled.
+    core_freq=250
+
+    [all]
+    # Boot in 64-bit mode.
+    arm_64bit=1
+
+    # U-Boot needs this to work, regardless of whether UART is actually used or not.
+    enable_uart=1
+
+    # Prevent the firmware from smashing the framebuffer setup done by the mainline kernel
+    # when attempting to show low-voltage or overtemperature warnings.
+    avoid_warnings=1
+  '';
+
+  raspberryPi3BPlusFirmwarePackage = pkgs.linkFarm "raspberrypi3bplus-firmware" [
+    {
+      name = "bootcode.bin";
+      path = "${raspberryPi3BPlusFirmwareBoot}/bootcode.bin";
+    }
+    {
+      name = "start.elf";
+      path = "${raspberryPi3BPlusFirmwareBoot}/start.elf";
+    }
+    {
+      name = "start_cd.elf";
+      path = "${raspberryPi3BPlusFirmwareBoot}/start_cd.elf";
+    }
+    {
+      name = "start_db.elf";
+      path = "${raspberryPi3BPlusFirmwareBoot}/start_db.elf";
+    }
+    {
+      name = "start_x.elf";
+      path = "${raspberryPi3BPlusFirmwareBoot}/start_x.elf";
+    }
+    {
+      name = "fixup.dat";
+      path = "${raspberryPi3BPlusFirmwareBoot}/fixup.dat";
+    }
+    {
+      name = "fixup_cd.dat";
+      path = "${raspberryPi3BPlusFirmwareBoot}/fixup_cd.dat";
+    }
+    {
+      name = "fixup_db.dat";
+      path = "${raspberryPi3BPlusFirmwareBoot}/fixup_db.dat";
+    }
+    {
+      name = "fixup_x.dat";
+      path = "${raspberryPi3BPlusFirmwareBoot}/fixup_x.dat";
+    }
+    {
+      name = "bcm2710-rpi-3-b-plus.dtb";
+      path = "${raspberryPi3BPlusFirmwareBoot}/bcm2710-rpi-3-b-plus.dtb";
+    }
+    {
+      name = "u-boot-rpi3.bin";
+      path = "${raspberryPi3BPlusUboot}/u-boot.bin";
+    }
+    {
+      name = "config.txt";
+      path = raspberryPi3BPlusConfigTxt;
+    }
+    {
+      name = "LICENCE.broadcom";
+      path = "${raspberryPi3BPlusFirmwareBoot}/LICENCE.broadcom";
+    }
+    {
+      name = "COPYING.linux";
+      path = "${raspberryPi3BPlusFirmwareBoot}/COPYING.linux";
+    }
+  ];
+
+  raspberryPi3BPlusBootPartitionImage = pkgs.runCommand "raspberrypi3bplus.boot-partition.img" {
+    nativeBuildInputs = [
+      pkgs.dosfstools
+      pkgs.mtools
+    ];
+  } ''
+    truncate -s 64M "$out"
+    mkfs.vfat -n RPI3BOOT "$out" >/dev/null
+    for file in ${raspberryPi3BPlusFirmwarePackage}/*; do
+      mcopy -i "$out" "$file" "::/$(basename "$file")"
+    done
+  '';
+
+  raspberryPi3BPlusReleaseBundle = pkgs.runCommand "raspberrypi3bplus-release-candidate-bundle" {
+    nativeBuildInputs = [pkgs.jq];
+  } ''
+    mkdir -p "$out/firmware"
+
+    cp ${raspberryPi3BPlusBootPartitionImage} "$out/boot-partition.img"
+    cp ${raspberryPi3BPlusFirmwarePackage}/u-boot-rpi3.bin "$out/u-boot-rpi3.bin"
+    cp -r ${raspberryPi3BPlusFirmwarePackage}/. "$out/firmware/"
+
+    boot_partition_size=$(stat -c%s "$out/boot-partition.img")
+    boot_partition_sha=$(sha256sum "$out/boot-partition.img" | cut -d' ' -f1)
+    uboot_size=$(stat -c%s "$out/u-boot-rpi3.bin")
+    uboot_sha=$(sha256sum "$out/u-boot-rpi3.bin" | cut -d' ' -f1)
+    firmware_tar="$out/raspberry-pi-firmware.tar"
+    tar -C "$out/firmware" -cf "$firmware_tar" .
+    firmware_size=$(stat -c%s "$firmware_tar")
+    firmware_sha=$(sha256sum "$firmware_tar" | cut -d' ' -f1)
+
+    cat > "$out/release.json" <<EOF
+{
+  "schema_version": 1,
+  "release": "${raspberryPi3BPlusReleaseCandidate}",
+  "board": "raspberry-pi-3-b-plus",
+  "sources": {
+    "u_boot": "v${raspberryPi3BPlusUboot.version}",
+    "trusted_firmware_a": null,
+    "bootswain": "${bootswainRevision}",
+    "nixpkgs": "${nixpkgsRevision}"
+  },
+  "storage_layout": {
+    "spi_size_bytes": null,
+    "spi_firmware_offset_bytes": null,
+    "spi_firmware_size_bytes": null,
+    "environment_offset_bytes": null,
+    "environment_size_bytes": null,
+    "shared_storage_firmware_partition": "RPI3BOOT"
+  },
+  "boot_policy": {
+    "default_order": ["sd", "usb"],
+    "preferred_protocols": ["extlinux"],
+    "no_bootable_media_behavior": "Raspberry Pi firmware loads U-Boot from FAT boot media; U-Boot then uses extlinux."
+  },
+  "environment_policy": {
+    "persistent": false,
+    "location": null,
+    "stale_environment_safe": true,
+    "notes": "Raspberry Pi 3 B+ release-candidate support uses generated boot firmware files and does not claim a persistent U-Boot environment."
+  },
+  "artifacts": [
+    {
+      "kind": "boot-partition-image",
+      "path": "boot-partition.img",
+      "compression": "none",
+      "size_bytes": $boot_partition_size,
+      "sha256": "$boot_partition_sha",
+      "required_device_size_bytes": $boot_partition_size,
+      "flashable": true
+    },
+    {
+      "kind": "raspberry-pi-firmware",
+      "path": "raspberry-pi-firmware.tar",
+      "compression": "none",
+      "size_bytes": $firmware_size,
+      "sha256": "$firmware_sha",
+      "required_device_size_bytes": null,
+      "flashable": false
+    },
+    {
+      "kind": "u-boot-rpi3",
+      "path": "u-boot-rpi3.bin",
+      "compression": "none",
+      "size_bytes": $uboot_size,
+      "sha256": "$uboot_sha",
+      "required_device_size_bytes": null,
+      "flashable": false
+    }
+  ],
+  "validation_claims": [
+    {
+      "target": "sd",
+      "protocols": ["extlinux"],
+      "tested": false,
+      "scenarios": ["sd-extlinux-boot", "serial-u-boot-prompt"],
+      "notes": "Release-candidate only; stable Raspberry Pi 3 B+ claims require imported hardware validation evidence."
+    },
+    {
+      "target": "usb",
+      "protocols": ["extlinux"],
+      "tested": false,
+      "scenarios": ["usb-extlinux-boot"],
+      "notes": "USB boot is board-firmware dependent and remains unvalidated for stable support."
+    }
+  ],
+  "unsupported_paths": [
+    "stable Raspberry Pi 3 B+ support without hardware validation logs",
+    "direct Linux kernel firmware boot",
+    "32-bit Raspberry Pi boot flow",
+    "EEPROM-style update workflows",
+    "network boot"
+  ]
+}
+EOF
+
+    cp "$out/release.json" "$out/manifest.json"
+    cat > "$out/provenance.json" <<EOF
+{
+  "board": "raspberry-pi-3-b-plus",
+  "soc": "broadcom-bcm2837b0",
+  "release": "${raspberryPi3BPlusReleaseCandidate}",
+  "channel": "release-candidate",
+  "hardware_validation": {
+    "performed": false,
+    "record": "validation/raspberrypi3bplus/stable",
+    "note": "Release candidate only; stable promotion requires Raspberry Pi 3 B+ hardware validation evidence."
+  },
+  "source_revisions": {
+    "u_boot": "v${raspberryPi3BPlusUboot.version}",
+    "raspberrypi_firmware": "${raspberryPi3BPlusFirmware.version}",
+    "nixpkgs": "${nixpkgsRevision}",
+    "bootswain": "${bootswainRevision}"
+  },
+  "built_artifacts": {
+    "boot_partition_image": "${raspberryPi3BPlusBootPartitionImage}",
+    "firmware_package": "${raspberryPi3BPlusFirmwarePackage}",
+    "u_boot_rpi3": "${raspberryPi3BPlusUboot}/u-boot.bin",
+    "config_txt": "${raspberryPi3BPlusConfigTxt}"
+  }
+}
+EOF
+
+    mkdir -p "$out/validation"
+    printf '%s\n' \
+      "Stable Raspberry Pi 3 B+ validation evidence has not been imported." \
+      "Use validation/raspberrypi3bplus/stable/validation-run.json plus serial logs before stable promotion." \
+      > "$out/validation/README.txt"
+
+    cat > "$out/release-notes.md" <<EOF
+# Raspberry Pi 3 B+ ${raspberryPi3BPlusReleaseCandidate}
+
+Channel: release-candidate
+
+## Artifacts
+
+- \`boot-partition.img\`: FAT boot partition image with Raspberry Pi firmware, config.txt, bcm2710-rpi-3-b-plus.dtb, and u-boot-rpi3.bin
+- \`firmware/\`: unpacked boot firmware payload
+- \`raspberry-pi-firmware.tar\`: archived boot firmware payload
+- \`u-boot-rpi3.bin\`: U-Boot payload selected by config.txt
+- \`release.json\`: machine-readable release metadata
+- \`sha256sums.txt\`: checksums for published artifacts
+- \`provenance.json\`: source and build provenance
+
+## Validation
+
+Hardware validation performed: no
+
+Release candidate only; stable promotion requires validation/raspberrypi3bplus/stable evidence.
+EOF
+
+    (
+      cd "$out"
+      sha256sum \
+        boot-partition.img \
+        raspberry-pi-firmware.tar \
+        u-boot-rpi3.bin \
+        release.json \
+        release-notes.md \
+        provenance.json \
+        > sha256sums.txt
+    )
+  '';
+
+  raspberryPi3BPlusReleaseManifest = pkgs.runCommand "raspberrypi3bplus-release.json" {} ''
+    cp ${raspberryPi3BPlusReleaseBundle}/release.json "$out"
+  '';
+
+  raspberryPi3BPlusPackagingCheck = pkgs.runCommand "raspberrypi3bplus-packaging-check" {} ''
+    test -s ${raspberryPi3BPlusFirmwarePackage}/bootcode.bin
+    test -s ${raspberryPi3BPlusFirmwarePackage}/start.elf
+    test -s ${raspberryPi3BPlusFirmwarePackage}/fixup.dat
+    test -s ${raspberryPi3BPlusFirmwarePackage}/bcm2710-rpi-3-b-plus.dtb
+    test -s ${raspberryPi3BPlusFirmwarePackage}/u-boot-rpi3.bin
+    test -s ${raspberryPi3BPlusFirmwarePackage}/config.txt
+    grep -q 'kernel=u-boot-rpi3.bin' ${raspberryPi3BPlusFirmwarePackage}/config.txt
+    grep -q 'arm_64bit=1' ${raspberryPi3BPlusFirmwarePackage}/config.txt
+    test -s ${raspberryPi3BPlusBootPartitionImage}
+    test -s ${raspberryPi3BPlusReleaseBundle}/release.json
+    test -s ${raspberryPi3BPlusReleaseBundle}/sha256sums.txt
+    test -s ${raspberryPi3BPlusReleaseBundle}/boot-partition.img
+    test -s ${raspberryPi3BPlusReleaseBundle}/u-boot-rpi3.bin
+    test -s ${raspberryPi3BPlusReleaseBundle}/firmware/config.txt
+    grep -q '"board": "raspberry-pi-3-b-plus"' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"trusted_firmware_a": null' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"spi_size_bytes": null' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"kind": "boot-partition-image"' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"kind": "raspberry-pi-firmware"' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"kind": "u-boot-rpi3"' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"flashable": true' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q '"tested": false' ${raspberryPi3BPlusReleaseBundle}/release.json
+    grep -q 'boot-partition.img' ${raspberryPi3BPlusReleaseBundle}/sha256sums.txt
+    grep -q 'Hardware validation performed: no' ${raspberryPi3BPlusReleaseBundle}/release-notes.md
+    mkdir -p "$out"
+    printf '%s\n' "raspberry pi 3 b+ release-candidate packaging is wired up" > "$out/result"
+  '';
+
   rockpro64ReleaseManifest = pkgs.runCommand "rockpro64-release.json" {} ''
     cp ${rockpro64ReleaseBundle}/release.json "$out"
   '';
@@ -1054,6 +1353,8 @@ in {
   inherit
     validationDir
     qemuArm64Uboot
+    raspberryPi3BPlusReleaseCandidate
+    raspberryPi3BPlusReleaseBundle
     rockpro64ExperimentalRelease
     rockpro64ReleaseBundle
     rockpro64ReleaseBundleExperimental
@@ -1071,9 +1372,14 @@ in {
     "rockpro64-release-bundle-experimental" = rockpro64ReleaseBundleExperimental;
     "rockpro64-release-manifest" = rockpro64ReleaseManifest;
     "rockpro64-checksums-provenance" = rockpro64ChecksumsProvenance;
+    "raspberrypi3bplus-firmware" = raspberryPi3BPlusFirmwarePackage;
+    "raspberrypi3bplus-boot-partition-image" = raspberryPi3BPlusBootPartitionImage;
+    "raspberrypi3bplus-release-bundle" = raspberryPi3BPlusReleaseBundle;
+    "raspberrypi3bplus-release-manifest" = raspberryPi3BPlusReleaseManifest;
   };
 
   checks = {
     rockpro64-packaging = rockpro64PackagingCheck;
+    raspberrypi3bplus-packaging = raspberryPi3BPlusPackagingCheck;
   };
 }

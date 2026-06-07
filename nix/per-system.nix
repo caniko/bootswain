@@ -17,7 +17,10 @@
         then pkg.pname
         else (builtins.parseDrvName pkg.name).name
       )
-      ["arm-trusted-firmware-rk3399"];
+      [
+        "arm-trusted-firmware-rk3399"
+        "raspberrypi-firmware"
+      ];
     overlays = [(import rust-overlay)];
   };
   lib = pkgs.lib;
@@ -52,6 +55,8 @@
       (artifacts)
       qemuArm64Uboot
       validationDir
+      raspberryPi3BPlusReleaseBundle
+      raspberryPi3BPlusReleaseCandidate
       rockpro64ExperimentalRelease
       rockpro64ReleaseBundleExperimental
       ;
@@ -62,6 +67,7 @@
     inherit (workspace) bootswain;
     inherit
       (artifacts)
+      raspberryPi3BPlusReleaseBundle
       rockpro64ReleaseBundle
       rockpro64ReleaseBundleExperimental
       ;
@@ -80,6 +86,17 @@
       mkdir -p "$out"
       printf '%s\n' "fake updater script" > "$out/nixos-updater.boot.scr.uimg"
       printf '%s\n' "fake spi payload" > "$out/u-boot-rockchip-spi.bin"
+    '';
+    fakeRaspberryPi3BPlusFirmwarePackage = pkgs.runCommand "bootswain-raspberrypi3bplus-fake-firmware" {} ''
+      mkdir -p "$out"
+      printf '%s\n' "fake bootcode" > "$out/bootcode.bin"
+      printf '%s\n' "fake start" > "$out/start.elf"
+      printf '%s\n' "fake start cd" > "$out/start_cd.elf"
+      printf '%s\n' "fake fixup" > "$out/fixup.dat"
+      printf '%s\n' "fake fixup cd" > "$out/fixup_cd.dat"
+      printf '%s\n' "fake dtb" > "$out/bcm2710-rpi-3-b-plus.dtb"
+      printf '%s\n' "fake uboot" > "$out/u-boot-rpi3.bin"
+      printf '%s\n' "kernel=u-boot-rpi3.bin" > "$out/config.txt"
     '';
     mkTestSystem = testSystem:
       nixpkgs.lib.nixosSystem {
@@ -108,6 +125,41 @@
         (
           {...}: {
             boot.bootswain.rockpro64.firmwarePackage = fakeFirmwarePackage;
+            fileSystems."/" = {
+              device = "none";
+              fsType = "tmpfs";
+            };
+            system.stateVersion = "26.05";
+          }
+        )
+      ];
+    };
+    raspberryPi3BPlusConfig = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        self.nixosModules.raspberryPi3BPlus
+        (
+          {...}: {
+            boot.bootswain.raspberryPi3BPlus = {
+              enable = true;
+              firmwarePackage = fakeRaspberryPi3BPlusFirmwarePackage;
+            };
+            fileSystems."/" = {
+              device = "none";
+              fsType = "tmpfs";
+            };
+            system.stateVersion = "26.05";
+          }
+        )
+      ];
+    };
+    raspberryPi3BPlusBootableConfig = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        self.nixosModules.raspberryPi3BPlusBootable
+        (
+          {...}: {
+            boot.bootswain.raspberryPi3BPlus.firmwarePackage = fakeRaspberryPi3BPlusFirmwarePackage;
             fileSystems."/" = {
               device = "none";
               fsType = "tmpfs";
@@ -158,10 +210,34 @@
         else "false"
       }
       bootableConsole=${builtins.concatStringsSep " " bootableConfig.config.boot.kernelParams}
+      raspberryPi3BPlusBootFiles=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles.name}
+      raspberryPi3BPlusGrub=${
+        if raspberryPi3BPlusConfig.config.boot.loader.grub.enable
+        then "true"
+        else "false"
+      }
+      raspberryPi3BPlusExtlinux=${
+        if raspberryPi3BPlusConfig.config.boot.loader.generic-extlinux-compatible.enable
+        then "true"
+        else "false"
+      }
+      raspberryPi3BPlusSystemdBoot=${
+        if raspberryPi3BPlusConfig.config.boot.loader.systemd-boot.enable
+        then "true"
+        else "false"
+      }
+      raspberryPi3BPlusBootableHostPlatform=${raspberryPi3BPlusBootableConfig.config.nixpkgs.hostPlatform.system}
+      raspberryPi3BPlusBootableEnabled=${
+        if raspberryPi3BPlusBootableConfig.config.boot.bootswain.raspberryPi3BPlus.enable
+        then "true"
+        else "false"
+      }
+      raspberryPi3BPlusBootableConsole=${builtins.concatStringsSep " " raspberryPi3BPlusBootableConfig.config.boot.kernelParams}
     '';
   in
     pkgs.runCommand "bootswain-rockpro64-nixos-module-check" {} ''
       boot_files=${currentSystemConfig.config.system.build.bootswainRockpro64BootFiles}
+      rpi_boot_files=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles}
 
       test -s "$boot_files/boot.scr.uimg"
       test -s "$boot_files/boot/boot.scr.uimg"
@@ -169,6 +245,12 @@
       test -s "$boot_files/boot/u-boot-rockchip-spi.bin"
       cmp "$boot_files/boot.scr.uimg" "$boot_files/boot/boot.scr.uimg"
       cmp "$boot_files/u-boot-rockchip-spi.bin" "$boot_files/boot/u-boot-rockchip-spi.bin"
+      test -s "$rpi_boot_files/bootcode.bin"
+      test -s "$rpi_boot_files/config.txt"
+      test -s "$rpi_boot_files/bcm2710-rpi-3-b-plus.dtb"
+      test -s "$rpi_boot_files/u-boot-rpi3.bin"
+      test -s "$rpi_boot_files/start.elf"
+      test -s "$rpi_boot_files/fixup.dat"
 
       grep -q '^bootFiles=bootswain-rockpro64-boot-files$' ${aarch64EvalSummary}
       grep -q '^grub=false$' ${aarch64EvalSummary}
@@ -180,6 +262,14 @@
       grep -q '^bootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
       grep -q '^bootableEnabled=true$' ${aarch64EvalSummary}
       grep -q '^bootableConsole=.*console=ttyS2,115200n8' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusBootFiles=bootswain-raspberrypi3bplus-boot-files$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusGrub=false$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusExtlinux=true$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusSystemdBoot=false$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusBootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusBootableEnabled=true$' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusBootableConsole=.*console=ttyAMA0,115200n8' ${aarch64EvalSummary}
+      grep -q '^raspberryPi3BPlusBootableConsole=.*console=tty0' ${aarch64EvalSummary}
 
       mkdir -p "$out"
       cp ${aarch64EvalSummary} "$out/aarch64-eval.txt"

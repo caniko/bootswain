@@ -1,6 +1,7 @@
 {
   pkgs,
   bootswain,
+  raspberryPi3BPlusReleaseBundle,
   rockpro64ReleaseBundle,
   rockpro64ReleaseBundleExperimental,
 }:
@@ -56,6 +57,7 @@ let
       show_targets() {
         cat <<'EOF'
       available targets:
+        raspberrypi3bplus-boot-partition    channel: release-candidate artifact: boot-partition-image
         rockpro64-spi-installer               channel: release-candidate artifact: spi-installer
         rockpro64-spi-installer-experimental  channel: experimental artifact: spi-installer
         rockpro64-shared-disk-image           channel: release-candidate artifact: shared-disk-image
@@ -139,9 +141,17 @@ let
         rockpro64-experimental)
           target="rockpro64-spi-installer-experimental"
           ;;
+        raspberrypi3bplus|rpi3bplus)
+          target="raspberrypi3bplus-boot-partition"
+          ;;
       esac
 
       case "$target" in
+        raspberrypi3bplus-boot-partition)
+          bundle="${raspberryPi3BPlusReleaseBundle}"
+          artifact="boot-partition-image"
+          channel="release-candidate"
+          ;;
         rockpro64-spi-installer)
           bundle="${rockpro64ReleaseBundle}"
           artifact="spi-installer"
@@ -192,6 +202,7 @@ let
     mkdir -p "$out"
 
     ${flashApp}/bin/bootswain-flash --list-targets > "$out/targets.txt"
+    grep -q 'raspberrypi3bplus-boot-partition' "$out/targets.txt"
     grep -q 'rockpro64-spi-installer' "$out/targets.txt"
     grep -q 'rockpro64-spi-installer-experimental' "$out/targets.txt"
     grep -q 'rockpro64-shared-disk-image' "$out/targets.txt"
@@ -220,6 +231,25 @@ let
     test "$status" -eq 2
     grep -q 'unknown target: nope' "$out/unknown-target.err"
     grep -q 'rockpro64-spi-installer' "$out/unknown-target.err"
+    grep -q 'raspberrypi3bplus-boot-partition' "$out/unknown-target.err"
+
+    set +e
+    ${flashApp}/bin/bootswain-flash \
+      --target rpi3bplus \
+      --device /dev/null \
+      --dry-run \
+      > "$out/rpi3bplus-alias.out" 2> "$out/rpi3bplus-alias.err"
+    status=$?
+    set -e
+    test "$status" -ne 0
+    grep -q 'bootswain flash alias: rpi3bplus -> raspberrypi3bplus-boot-partition' "$out/rpi3bplus-alias.err"
+    grep -q 'bootswain flash target: raspberrypi3bplus-boot-partition' "$out/rpi3bplus-alias.err"
+    grep -q 'bootswain flash artifact: boot-partition-image' "$out/rpi3bplus-alias.err"
+    grep -q 'target is not a block device: /dev/null' "$out/rpi3bplus-alias.err"
+    if grep -q 'not marked flashable' "$out/rpi3bplus-alias.err"; then
+      echo "raspberry pi 3 b+ target unexpectedly failed manifest gating" >&2
+      exit 1
+    fi
 
     set +e
     ${flashApp}/bin/bootswain-flash \

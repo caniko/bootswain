@@ -49,6 +49,8 @@
       nixosModules = rec {
         rockpro64 = import ./nix/nixosModules/rockpro64.nix {inherit self;};
         rockpro64Bootable = import ./nix/nixosModules/rockpro64-bootable.nix {inherit self;};
+        raspberryPi3BPlus = import ./nix/nixosModules/raspberrypi3bplus.nix {inherit self;};
+        raspberryPi3BPlusBootable = import ./nix/nixosModules/raspberrypi3bplus-bootable.nix {inherit self;};
         default = rockpro64;
       };
     };

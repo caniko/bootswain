@@ -5,6 +5,8 @@
   src,
   qemuArm64Uboot,
   validationDir,
+  raspberryPi3BPlusReleaseBundle,
+  raspberryPi3BPlusReleaseCandidate,
   rockpro64ExperimentalRelease,
   rockpro64ReleaseBundleExperimental,
 }:
@@ -58,6 +60,7 @@ let
     test -s ${validationDir}/qemu-arm64/generic-smoke.json
     test -s ${validationDir}/qemu-arm64/boot-smoke.json
     test -s ${validationDir}/rockpro64/lab-plan.json
+    test -s ${validationDir}/raspberrypi3bplus/lab-plan.json
 
     if grep -Eiq 'rockpro64|rk3399' "$out/machines.txt"; then
       printf '%s\n' \
@@ -106,6 +109,27 @@ let
       grep -q 'u-boot-rockchip: u-boot-rockchip.bin' "$out/artifacts.txt"
       grep -q 'u-boot-rockchip-spi: u-boot-rockchip-spi.bin' "$out/artifacts.txt"
     '';
+  raspberryPi3BPlusBundleCheck =
+    pkgs.runCommand "raspberrypi3bplus-bundle-check" { } ''
+      mkdir -p "$out"
+
+      ${bootswain}/bin/bootswain firmware inspect \
+        --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
+        > "$out/inspect.txt"
+      ${bootswain}/bin/bootswain firmware artifacts \
+        --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
+        > "$out/artifacts.txt"
+
+      grep -q 'release: ${raspberryPi3BPlusReleaseCandidate}' "$out/inspect.txt"
+      grep -q 'board: raspberry-pi-3-b-plus' "$out/inspect.txt"
+      grep -q 'trusted-firmware-a: not-applicable' "$out/inspect.txt"
+      grep -q 'spi-size-bytes: not-applicable' "$out/inspect.txt"
+      grep -q 'artifacts: 3' "$out/inspect.txt"
+      grep -q 'boot-partition-image: boot-partition.img' "$out/artifacts.txt"
+      grep -q 'raspberry-pi-firmware: raspberry-pi-firmware.tar' "$out/artifacts.txt"
+      grep -q 'u-boot-rpi3: u-boot-rpi3.bin' "$out/artifacts.txt"
+      grep -q 'flashable: yes' "$out/artifacts.txt"
+    '';
 in
 {
   inherit bootswain;
@@ -119,6 +143,7 @@ in
     inherit bootswain;
     qemu-arm64-boot-smoke = qemuArm64BootSmokeCheck;
     qemu-arm64-tooling = qemuArm64ToolingCheck;
+    raspberrypi3bplus-bundle = raspberryPi3BPlusBundleCheck;
     rockpro64-experimental-bundle = rockpro64ExperimentalBundleCheck;
     workspace-clippy = craneLib.cargoClippy (
       commonArgs

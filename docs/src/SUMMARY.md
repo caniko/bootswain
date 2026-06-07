@@ -20,6 +20,12 @@
 - [Operator Notes](./rockpro64/operator-notes.md)
 - [NixOS Integration](./rockpro64/nixos.md)
 
+# Raspberry Pi 3 B+
+
+- [Status and Support Claims](./raspberrypi3bplus/status.md)
+- [Operator Notes](./raspberrypi3bplus/operator-notes.md)
+- [NixOS Integration](./raspberrypi3bplus/nixos.md)
+
 # Validation
 
 - [Generic ARM64 QEMU](./validation/qemu-arm64.md)
@@ -29,3 +35,4 @@
 # Release
 
 - [ROCKPro64 Release Guide](./release/rockpro64.md)
+- [Raspberry Pi 3 B+ Release Guide](./release/raspberrypi3bplus.md)

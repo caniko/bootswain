@@ -8,6 +8,8 @@ use std::str::FromStr;
 #[serde(rename_all = "kebab-case")]
 pub enum Board {
     GenericArm64Qemu,
+    #[serde(rename = "raspberry-pi-3-b-plus")]
+    RaspberryPi3BPlus,
     RockPro64,
 }
 
@@ -16,6 +18,7 @@ impl Board {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::GenericArm64Qemu => "generic-arm64-qemu",
+            Self::RaspberryPi3BPlus => "raspberry-pi-3-b-plus",
             Self::RockPro64 => "rockpro64",
         }
     }
@@ -33,6 +36,9 @@ impl FromStr for Board {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "generic-arm64-qemu" => Ok(Self::GenericArm64Qemu),
+            "raspberry-pi-3-b-plus" | "raspberrypi3bplus" | "rpi3bplus" | "rpi-3-b-plus" => {
+                Ok(Self::RaspberryPi3BPlus)
+            }
             "rockpro64" | "rock-pro64" => Ok(Self::RockPro64),
             _ => Err(format!("unknown board: {value}")),
         }
@@ -91,7 +97,10 @@ pub enum FirmwareArtifactKind {
     SpiFirmware,
     SpiInstaller,
     SharedDiskImage,
+    BootPartitionImage,
+    RaspberryPiFirmware,
     Idbloader,
+    UBootRpi3,
     UBootItb,
     UBootRockchip,
     UBootRockchipSpi,
@@ -107,7 +116,10 @@ impl FirmwareArtifactKind {
             Self::SpiFirmware => "spi-firmware",
             Self::SpiInstaller => "spi-installer",
             Self::SharedDiskImage => "shared-disk-image",
+            Self::BootPartitionImage => "boot-partition-image",
+            Self::RaspberryPiFirmware => "raspberry-pi-firmware",
             Self::Idbloader => "idbloader",
+            Self::UBootRpi3 => "u-boot-rpi3",
             Self::UBootItb => "u-boot-itb",
             Self::UBootRockchip => "u-boot-rockchip",
             Self::UBootRockchipSpi => "u-boot-rockchip-spi",
@@ -132,7 +144,10 @@ impl FromStr for FirmwareArtifactKind {
             "spi-firmware" => Ok(Self::SpiFirmware),
             "spi-installer" => Ok(Self::SpiInstaller),
             "shared-disk-image" => Ok(Self::SharedDiskImage),
+            "boot-partition-image" => Ok(Self::BootPartitionImage),
+            "raspberry-pi-firmware" => Ok(Self::RaspberryPiFirmware),
             "idbloader" => Ok(Self::Idbloader),
+            "u-boot-rpi3" => Ok(Self::UBootRpi3),
             "u-boot-itb" => Ok(Self::UBootItb),
             "u-boot-rockchip" => Ok(Self::UBootRockchip),
             "u-boot-rockchip-spi" => Ok(Self::UBootRockchipSpi),
@@ -191,7 +206,8 @@ impl fmt::Display for BootTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FirmwareSourceRevisions {
     pub u_boot: String,
-    pub trusted_firmware_a: String,
+    #[serde(default)]
+    pub trusted_firmware_a: Option<String>,
     pub bootswain: Option<String>,
     #[serde(default)]
     pub nixpkgs: Option<String>,
@@ -199,8 +215,10 @@ pub struct FirmwareSourceRevisions {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FirmwareStorageLayout {
-    pub spi_size_bytes: u64,
-    pub spi_firmware_offset_bytes: u64,
+    #[serde(default)]
+    pub spi_size_bytes: Option<u64>,
+    #[serde(default)]
+    pub spi_firmware_offset_bytes: Option<u64>,
     pub spi_firmware_size_bytes: Option<u64>,
     pub environment_offset_bytes: Option<u64>,
     pub environment_size_bytes: Option<u64>,
@@ -982,7 +1000,16 @@ mod tests {
             (FirmwareArtifactKind::SpiFirmware, "spi-firmware"),
             (FirmwareArtifactKind::SpiInstaller, "spi-installer"),
             (FirmwareArtifactKind::SharedDiskImage, "shared-disk-image"),
+            (
+                FirmwareArtifactKind::BootPartitionImage,
+                "boot-partition-image",
+            ),
+            (
+                FirmwareArtifactKind::RaspberryPiFirmware,
+                "raspberry-pi-firmware",
+            ),
             (FirmwareArtifactKind::Idbloader, "idbloader"),
+            (FirmwareArtifactKind::UBootRpi3, "u-boot-rpi3"),
             (FirmwareArtifactKind::UBootItb, "u-boot-itb"),
             (FirmwareArtifactKind::UBootRockchip, "u-boot-rockchip"),
             (
@@ -1048,6 +1075,18 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&ValidationExecutorKind::QemuArm64).expect("serialize executor"),
             "\"qemu-arm64\""
+        );
+        assert_eq!(
+            Board::RaspberryPi3BPlus.to_string(),
+            "raspberry-pi-3-b-plus"
+        );
+        assert_eq!(
+            serde_json::to_string(&Board::RaspberryPi3BPlus).expect("serialize pi board"),
+            "\"raspberry-pi-3-b-plus\""
+        );
+        assert_eq!(
+            "rpi3bplus".parse::<Board>().expect("parse pi alias"),
+            Board::RaspberryPi3BPlus
         );
         assert_eq!(
             serde_json::to_string(&ValidationExecutorKind::RockPro64Serial)
@@ -1193,13 +1232,13 @@ mod tests {
             board: Board::RockPro64,
             sources: FirmwareSourceRevisions {
                 u_boot: "v2026.04".into(),
-                trusted_firmware_a: "v2.13.0".into(),
+                trusted_firmware_a: Some("v2.13.0".into()),
                 bootswain: Some("dirty".into()),
                 nixpkgs: Some("test-nixpkgs".into()),
             },
             storage_layout: FirmwareStorageLayout {
-                spi_size_bytes: 16 * 1024 * 1024,
-                spi_firmware_offset_bytes: 0,
+                spi_size_bytes: Some(16 * 1024 * 1024),
+                spi_firmware_offset_bytes: Some(0),
                 spi_firmware_size_bytes: None,
                 environment_offset_bytes: None,
                 environment_size_bytes: None,
