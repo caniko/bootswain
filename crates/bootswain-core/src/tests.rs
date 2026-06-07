@@ -1,4 +1,3 @@
-
 use crate::{
     BlockDeviceInfo, BlockDeviceKind, Board, BootProtocol, BootTarget, CompressionKind,
     FirmwareArtifact, FirmwareArtifactKind, FirmwareBootPolicy, FirmwareEnvironmentPolicy,

@@ -12,15 +12,15 @@ use bootswain_cli::{
 };
 use bootswain_core::{
     FirmwareArtifact, FirmwareArtifactKind, FirmwareManifest, FlashExecutionResult, FlashRunResult,
-    QemuDiskInterface, ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus,
-    ValidationPlan, ValidationRun, read_json_file, write_pretty_json_file,
+    ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus, ValidationPlan,
+    ValidationRun, read_json_file, write_pretty_json_file,
 };
 use bootswain_flash::{
     execute_flash, inspect_image, plan_flash, validate_required_device_size,
     validate_target_device, verify_flash,
 };
 use bootswain_probe::{ProbeConfig, run_rockpro64_usb_probe};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -30,161 +30,11 @@ use std::sync::{
 };
 use std::time::Duration;
 
-#[derive(Debug, Parser)]
-#[command(name = "bootswain")]
-#[command(about = "ROCKPro64-first host-side flash and probe tooling for stock U-Boot")]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
+mod args;
 
-#[derive(Debug, Subcommand)]
-enum Command {
-    Image {
-        #[command(subcommand)]
-        command: ImageCommand,
-    },
-    Flash {
-        #[command(subcommand)]
-        command: FlashCommand,
-    },
-    Firmware {
-        #[command(subcommand)]
-        command: FirmwareCommand,
-    },
-    Probe {
-        #[command(subcommand)]
-        command: ProbeCommand,
-    },
-    Validate {
-        #[command(subcommand)]
-        command: ValidateCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum ImageCommand {
-    Inspect {
-        #[arg(long)]
-        image: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum FlashCommand {
-    Sd {
-        #[arg(long)]
-        image: Option<PathBuf>,
-        #[arg(long)]
-        device: PathBuf,
-        #[arg(long)]
-        manifest: Option<PathBuf>,
-        #[arg(long)]
-        artifact: Option<FirmwareArtifactKind>,
-        #[arg(long)]
-        yes: bool,
-        #[arg(long)]
-        dry_run: bool,
-        #[arg(long)]
-        verify: bool,
-        #[arg(long)]
-        verify_only: bool,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        allow_non_flashable: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum FirmwareCommand {
-    Inspect {
-        #[arg(long)]
-        manifest: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    Artifacts {
-        #[arg(long)]
-        manifest: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum ProbeCommand {
-    Rockpro64Usb {
-        #[arg(long)]
-        image: PathBuf,
-        #[arg(long)]
-        port: String,
-        #[arg(long, default_value_t = 115_200)]
-        baud: u32,
-        #[arg(long, default_value = "bootswain-probe-output")]
-        out: PathBuf,
-        #[arg(long, default_value_t = 1)]
-        repeat: u32,
-        #[arg(long, default_value_t = 20)]
-        prompt_timeout_secs: u64,
-        #[arg(long, default_value_t = 10)]
-        command_timeout_secs: u64,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum ValidateCommand {
-    Run {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long, default_value = "bootswain-validation-output")]
-        out: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    QemuArm64 {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        u_boot: PathBuf,
-        #[arg(long, default_value = "qemu-system-aarch64")]
-        qemu: PathBuf,
-        #[arg(long, default_value = "bootswain-qemu-arm64-output")]
-        out: PathBuf,
-        #[arg(long)]
-        disk: Option<PathBuf>,
-        #[arg(long, default_value = "virtio")]
-        disk_interface: QemuDiskInterface,
-        #[arg(long)]
-        timeout_secs: Option<u64>,
-        #[arg(long)]
-        dry_run: bool,
-        #[arg(long)]
-        json: bool,
-    },
-    Rockpro64Serial {
-        #[arg(long)]
-        plan: PathBuf,
-        #[arg(long)]
-        port: String,
-        #[arg(long, default_value_t = 115_200)]
-        baud: u32,
-        #[arg(long, default_value = "bootswain-rockpro64-serial-output")]
-        out: PathBuf,
-        #[arg(long = "scenario")]
-        scenarios: Vec<String>,
-        #[arg(long)]
-        allow_destructive_spi: bool,
-        #[arg(long)]
-        max_step_timeout_secs: Option<u64>,
-        #[arg(long)]
-        json: bool,
-    },
-}
+use args::{
+    Cli, Command, FirmwareCommand, FlashCommand, ImageCommand, ProbeCommand, ValidateCommand,
+};
 
 fn main() {
     if let Err(error) = run() {
