@@ -308,13 +308,14 @@ fn evaluate_qemu_scenario(
 
     let missing: Vec<&str> = expected
         .iter()
-        .map(String::as_str)
+        .copied()
         .filter(|pattern| !serial.contains(pattern))
         .collect();
 
     if missing.is_empty() {
         let mut evidence = expected
             .iter()
+            .copied()
             .map(|pattern| format!("matched serial pattern: {pattern:?}"))
             .collect::<Vec<_>>();
         if output.timed_out {
@@ -341,7 +342,8 @@ fn evaluate_qemu_scenario(
         executor: Some(ValidationExecutorKind::QemuArm64),
         evidence: expected
             .iter()
-            .filter(|pattern| serial.contains(pattern.as_str()))
+            .copied()
+            .filter(|pattern| serial.contains(pattern))
             .map(|pattern| format!("matched serial pattern: {pattern:?}"))
             .collect(),
         logs: logs.to_vec(),
@@ -363,11 +365,11 @@ fn is_hardware_only_scenario(scenario: &ValidationScenario) -> bool {
     )
 }
 
-fn expected_patterns(scenario: &ValidationScenario) -> Vec<String> {
+fn expected_patterns(scenario: &ValidationScenario) -> Vec<&str> {
     scenario
         .steps
         .iter()
-        .flat_map(|step| step.expect.iter().cloned())
+        .flat_map(|step| step.expect.iter().map(String::as_str))
         .collect()
 }
 
@@ -385,9 +387,12 @@ fn scenario_stdin(plan: &ValidationPlan) -> String {
 }
 
 fn command_for_evidence(command: &QemuCommandLine) -> String {
-    let mut parts = vec![command.program.display().to_string()];
-    parts.extend(command.args.iter().cloned());
-    parts.join(" ")
+    let mut output = command.program.display().to_string();
+    for arg in &command.args {
+        output.push(' ');
+        output.push_str(arg);
+    }
+    output
 }
 
 fn path_arg(path: &Path, label: &str) -> Result<String> {
