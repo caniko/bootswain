@@ -20,6 +20,11 @@
     rust-overlay.follows = "rs-harbor/rust-overlay";
     crane.follows = "rs-harbor/crane";
     flake-utils.follows = "rs-harbor/flake-utils";
+    plinth = {
+      url = "git+https://codeberg.org/caniko/plinth.git?ref=refs/heads/trunk";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   outputs = inputs @ {
@@ -27,6 +32,7 @@
     nixpkgs,
     rs-harbor,
     rs-harbor-macos-sdk-pin,
+    plinth,
     rust-overlay,
     flake-utils,
     ...
@@ -37,6 +43,7 @@
     }: system:
       import ./nix/per-system.nix {
         root = ./.;
+        inherit plinth;
         inherit self nixpkgs rs-harbor rust-overlay system macosSdkStorePath osxSdkVersion;
       };
   in

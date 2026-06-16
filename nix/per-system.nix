@@ -2,6 +2,7 @@
   root,
   self,
   nixpkgs,
+  plinth,
   rs-harbor,
   rust-overlay,
   system,
@@ -75,6 +76,12 @@
 
   sites = import ./modules/sites.nix {
     inherit pkgs lib root;
+  };
+  website = plinth.lib.${system}.mkProjectSite {
+    pname = "bootswain-website";
+    domain = "bootswain.tartanoglu.com";
+    configPath = root + /website/plinth-project.toml;
+    docsPackage = sites.packages.site or null;
   };
 
   shells = import ./modules/shells.nix {
@@ -276,8 +283,21 @@
       printf '%s\n' "bootswain ROCKPro64 NixOS module check passed" > "$out/result"
     '';
 in {
-  packages = workspace.packages // artifacts.packages // sites.packages;
-  apps = flash.apps;
+  packages =
+    workspace.packages
+    // artifacts.packages
+    // sites.packages
+    // {
+      inherit website;
+      site = website;
+    };
+  apps =
+    flash.apps
+    // {
+      deploy-pages = plinth.lib.${system}.mkDeployPagesApp {
+        domain = "bootswain.tartanoglu.com";
+      };
+    };
   checks =
     workspace.checks
     // artifacts.checks
