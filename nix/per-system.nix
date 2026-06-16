@@ -86,6 +86,7 @@
 
   shells = import ./modules/shells.nix {
     inherit rs-harbor pkgs cross toolchain;
+    plinthProject = plinth.packages.${system}.plinth-project;
   };
 
   nixosModuleCheck = let
