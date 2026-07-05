@@ -13,7 +13,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     rs-harbor = {
-      url = "git+ssh://git@codeberg.org/caniko/rs-harbor.git";
+      url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     rs-harbor-macos-sdk-pin.url = "git+ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git";
