@@ -152,17 +152,18 @@
         ]
       },
       "locked": {
-        "lastModified": 1783251082,
-        "narHash": "sha256-XfHlECWS/u6FWjYAMOsGk6pcGx+z3HA8WWGWR7VvTSI=",
-        "ref": "refs/heads/trunk",
-        "rev": "a45718d96cdde0101ef8c20942fada0b188745f0",
-        "revCount": 1,
-        "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/nix-opencode-lsp.git"
+        "lastModified": 1785298780,
+        "narHash": "sha256-hq+/QcdG+pOKugcglqt92n3AwDbZnJB/Z+FCgmM3nwg=",
+        "owner": "caniko",
+        "repo": "nix-opencode-lsp",
+        "rev": "38e7ce16c754947a257a00a77682adfe696b6718",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/nix-opencode-lsp.git"
+        "owner": "caniko",
+        "repo": "nix-opencode-lsp",
+        "rev": "38e7ce16c754947a257a00a77682adfe696b6718",
+        "type": "github"
       }
     },
     "nixpkgs": {
@@ -294,15 +295,16 @@
       "locked": {
         "lastModified": 1779004173,
         "narHash": "sha256-CLTVNszR21O3Bd05fQ12rdm/89bcL7z7xp0NT3TAUVY=",
-        "ref": "refs/heads/main",
+        "owner": "caniko",
+        "repo": "rs-harbor-macos-sdk-pin",
         "rev": "df59522ba6dd77ed83f5e2c40104086a4792e0c0",
-        "revCount": 1,
-        "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git"
+        "owner": "caniko",
+        "repo": "rs-harbor-macos-sdk-pin",
+        "rev": "df59522ba6dd77ed83f5e2c40104086a4792e0c0",
+        "type": "github"
       }
     },
     "rust-overlay": {
