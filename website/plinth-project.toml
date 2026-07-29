@@ -1,6 +1,6 @@
 [site]
 title = "Bootswain"
-description = "<!-- simit:badges:start -->"
+description = "A Rust workspace for repeatable host-side board flashing, firmware inspection, serial probing, and validation workflows around U-Boot."
 base_url = "/"
 footer_note = "Generated from repository metadata by the plinth-project FOSS sweep."
 
@@ -19,13 +19,13 @@ href = "ssh://git@codeberg.org/caniko/bootswain.git"
 [[pages]]
 slug = "index"
 title = "Bootswain"
-description = "<!-- simit:badges:start -->"
+description = "A Rust workspace for repeatable host-side board flashing, firmware inspection, serial probing, and validation workflows around U-Boot."
 
 [[pages.sections]]
 type = "hero"
 title = "Bootswain"
-tagline = "<!-- simit:badges:start -->"
-subtitle = "<!-- simit:badges:start -->"
+tagline = "Evidence-gated firmware workflows for embedded boards."
+subtitle = "Inspect images, flash removable media, probe serial and USB paths, and validate ROCKPro64 and Raspberry Pi workflows with reproducible NixOS tooling."
 
 [[pages.sections.ctas]]
 label = "View source"
@@ -37,10 +37,13 @@ type = "feature_grid"
 id = "overview"
 
 [[pages.sections.features]]
-title = "Rust"
-description = "Project technology detected from repository manifests."
+title = "Firmware inspection"
+description = "Inspect raw and zstd-compressed image artifacts before they reach removable media, keeping image layout and provenance visible."
 
 [[pages.sections.features]]
-title = "Nix"
-description = "Project technology detected from repository manifests."
+title = "Board validation"
+description = "Exercise ROCKPro64 USB and serial validation workflows, with Raspberry Pi 3 B+ image support kept in the same evidence-gated toolchain."
 
+[[pages.sections.features]]
+title = "Reproducible images"
+description = "Package board images and NixOS integrations from a repeatable workspace instead of relying on undocumented manual flashing steps."
