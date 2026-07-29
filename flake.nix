@@ -1,8 +1,8 @@
 {
   description = "bootswain — ROCKPro64-first host-side flash and probe tooling plus firmware scaffolding";
 
-  # Advertise the private macOS SDK Attic cache so darwin cross-compiles
-  # substitute the realized SDK from the pin instead of rebuilding it.
+  # Advertise the macOS SDK Attic cache for hosts that explicitly configure
+  # a realized SDK through lib.mkPerSystem.
   nixConfig = {
     extra-substituters = ["https://attic.candee.baby/harbor-macos-sdk"];
     extra-trusted-public-keys = [
@@ -16,7 +16,6 @@
       url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk&rev=9bfa8bdb0ecb22d7bc11448665f7fbaebae7a759";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rs-harbor-macos-sdk-pin.url = "github:caniko/rs-harbor-macos-sdk-pin/df59522ba6dd77ed83f5e2c40104086a4792e0c0";
     rust-overlay.follows = "rs-harbor/rust-overlay";
     crane.follows = "rs-harbor/crane";
     flake-utils.url = "github:numtide/flake-utils";
@@ -31,15 +30,14 @@
     self,
     nixpkgs,
     rs-harbor,
-    rs-harbor-macos-sdk-pin,
     plinth,
     rust-overlay,
     flake-utils,
     ...
   }: let
     mkPerSystem = {
-      macosSdkStorePath ? rs-harbor-macos-sdk-pin.storePath,
-      osxSdkVersion ? rs-harbor-macos-sdk-pin.sdkVersion,
+      macosSdkStorePath ? null,
+      osxSdkVersion ? "26.1",
     }: system:
       import ./nix/per-system.nix {
         root = ./.;
