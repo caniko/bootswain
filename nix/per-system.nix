@@ -25,7 +25,7 @@
     overlays = [(import rust-overlay)];
   };
   lib = pkgs.lib;
-  toolchain = rs-harbor.lib.mkToolchain {inherit pkgs;};
+  toolchain = rs-harbor.lib.mkToolchain {inherit pkgs; toolchainProfile = "nightly";};
   cross = rs-harbor.lib.mkCross ({
       inherit pkgs system osxSdkVersion;
     }
