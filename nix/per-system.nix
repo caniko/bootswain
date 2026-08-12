@@ -196,11 +196,7 @@
         then "true"
         else "false"
       }
-      rockpro64DtbExists=${
-        if builtins.pathExists "${aarch64Config.config.hardware.deviceTree.package}/rockchip/rk3399-rockpro64.dtb"
-        then "true"
-        else "false"
-      }
+      rockpro64DtbExists=true
       rockpro64DtbActivation=${
         if lib.hasInfix "dtbs/rockchip/rk3399-rockpro64.dtb" aarch64Config.config.system.activationScripts.bootswainRockpro64BootFiles.text
         then "true"
@@ -246,6 +242,7 @@
     pkgs.runCommand "bootswain-rockpro64-nixos-module-check" {} ''
       boot_files=${currentSystemConfig.config.system.build.bootswainRockpro64BootFiles}
       rpi_boot_files=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles}
+      test -e "${aarch64Config.config.hardware.deviceTree.package}/rockchip/rk3399-rockpro64.dtb"
 
       test -s "$boot_files/boot.scr.uimg"
       test -s "$boot_files/boot/boot.scr.uimg"
