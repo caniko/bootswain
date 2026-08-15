@@ -36,7 +36,7 @@ Build the mdBook documentation:
 nix build .#docs
 ```
 
-Build the combined Codeberg Pages output:
+Build the combined GitHub Pages output:
 
 ```sh
 nix build .#site

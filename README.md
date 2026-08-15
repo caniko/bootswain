@@ -2,7 +2,7 @@
 
 <!-- simit:badges:start -->
 
-![CI](https://img.shields.io/badge/CI-drift-2088ff) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
+![CI](https://img.shields.io/badge/CI-managed-2088ff) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
 
 <!-- simit:badges:end -->
 
@@ -146,7 +146,7 @@ users, services, and deployment policy on top:
 
 ```nix
 {
-  inputs.bootswain.url = "git+https://codeberg.org/caniko/bootswain.git";
+  inputs.bootswain.url = "git+https://github.com/caniko/bootswain.git";
 
   outputs = {
     nixpkgs,
@@ -192,7 +192,7 @@ validation/raspberrypi3bplus/stable/
 
 ## Development
 
-The repository uses Nix for repeatable tooling and generated Forgejo CI for
+The repository uses Nix for repeatable tooling and generated GitHub Actions CI for
 testing. The generated CI workflows run package tests and clippy through
 `nix develop`, and run `nix flake check`.
 

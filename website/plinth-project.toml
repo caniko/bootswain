@@ -10,11 +10,11 @@ href = "#overview"
 
 [[nav]]
 label = "Source"
-href = "ssh://git@codeberg.org/caniko/bootswain.git"
+href = "https://github.com/caniko/bootswain"
 
 [[footer_links]]
 label = "Source"
-href = "ssh://git@codeberg.org/caniko/bootswain.git"
+href = "https://github.com/caniko/bootswain"
 
 [[pages]]
 slug = "index"
@@ -29,7 +29,7 @@ subtitle = "Inspect images, flash removable media, probe serial and USB paths, a
 
 [[pages.sections.ctas]]
 label = "View source"
-href = "ssh://git@codeberg.org/caniko/bootswain.git"
+href = "https://github.com/caniko/bootswain"
 primary = true
 
 [[pages.sections]]
