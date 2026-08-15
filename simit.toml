@@ -1,12 +1,11 @@
 [ci]
 runtime = "nix"
-runner = "codefloe-global"
+runner = "ubuntu-24.04"
 workspace = true
 with_audit = true
 with_deny = true
-step_runners = { cargo-clippy = "codeberg-small", cargo-doc = "codeberg-small", cargo-fmt = "codeberg-tiny", cargo-package = "codeberg-medium", cargo-test = "codeberg-medium", nix-check = "atlas-nix-trusted", quality-tools = "codeberg-small" }
-platform = "forgejo"
-provider = "crow"
+platform = "github"
+provider = "actions"
 
 [ci.pages]
 repo = "caniko/bootswain"

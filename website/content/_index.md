@@ -28,5 +28,5 @@ body = "Expose ROCKPro64 NixOS modules for boot artifact integration and downstr
 
 [[extra.features]]
 title = "Publish Together"
-body = "Build the presentation site and mdBook documentation as one Codeberg Pages output."
+body = "Build the presentation site and mdBook documentation as one GitHub Pages output."
 +++

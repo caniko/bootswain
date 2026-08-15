@@ -26,4 +26,4 @@ V1 is intentionally narrow:
 - evidence-gated shared-storage and stable hardware claims
 
 The source repository is hosted at
-[codeberg.org/caniko/bootswain](https://codeberg.org/caniko/bootswain).
+[github.com/caniko/bootswain](https://github.com/caniko/bootswain).

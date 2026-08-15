@@ -1,4 +1,4 @@
-base_url = "https://caniko.codeberg.page/bootswain"
+base_url = "https://bootswain.tartanoglu.com"
 title = "Bootswain"
 description = "ROCKPro64-first flash, probe, validation, and firmware packaging workflows"
 default_language = "en"
