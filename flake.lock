@@ -335,11 +335,11 @@
         "rev": "824c3f30a39b60426ff67f4976bbe7f4975b2009",
         "revCount": 3,
         "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git"
+        "url": "ssh://git@codefloe.com/caniko/rs-harbor-macos-sdk-pin.git"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git"
+        "url": "ssh://git@codefloe.com/caniko/rs-harbor-macos-sdk-pin.git"
       }
     },
     "rust-overlay": {

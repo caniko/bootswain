@@ -16,7 +16,7 @@
       url = "git+ssh://git@codeberg.org/caniko/rs-harbor.git?ref=trunk&rev=f209ddbca3fdbb0dc31fa3886ccc2ff7369c18ac";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rs-harbor-macos-sdk-pin.url = "git+ssh://git@codeberg.org/caniko/rs-harbor-macos-sdk-pin.git";
+    rs-harbor-macos-sdk-pin.url = "git+ssh://git@codefloe.com/caniko/rs-harbor-macos-sdk-pin.git";
     rust-overlay.follows = "rs-harbor/rust-overlay";
     crane.follows = "rs-harbor/crane";
     flake-utils.url = "github:numtide/flake-utils";
