@@ -11,7 +11,7 @@
     then crossbowCrossPkgs.stdenv.buildPlatform.system
     else pkgs.stdenv.hostPlatform.system;
   defaultFirmwarePackage = self.packages.${firmwarePackageSystem}.raspberrypi3bplus-firmware;
-  bootFiles = pkgs.buildPackages.runCommand "bootswain-raspberrypi3bplus-boot-files" {} ''
+  bootFiles = pkgs.runCommand "bootswain-raspberrypi3bplus-boot-files" {} ''
     mkdir -p "$out"
     cp ${cfg.firmwarePackage}/* "$out/"
   '';

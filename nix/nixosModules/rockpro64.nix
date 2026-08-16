@@ -18,10 +18,6 @@
     if crossbowCrossPkgs != null
     then crossbowCrossPkgs.stdenv.buildPlatform.system
     else pkgs.stdenv.hostPlatform.system;
-  buildPackageSet =
-    if crossbowCrossPkgs != null
-    then crossbowCrossPkgs.buildPackages
-    else pkgs.buildPackages;
   defaultFirmwarePackage = self.packages.${firmwarePackageSystem}.rockpro64-spi-firmware;
   removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
   nixosDtb = "rockchip/rk3399-rockpro64.dtb";
@@ -49,7 +45,7 @@
       systemctl reboot
     '';
   };
-  bootFiles = buildPackageSet.runCommand "bootswain-rockpro64-boot-files" {} ''
+  bootFiles = pkgs.runCommand "bootswain-rockpro64-boot-files" {} ''
     mkdir -p "$out/boot"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot.scr.uimg"
     install -m 0644 ${cfg.firmwarePackage}/nixos-updater.boot.scr.uimg "$out/boot/boot.scr.uimg"
