@@ -329,17 +329,18 @@
     },
     "rs-harbor-macos-sdk-pin": {
       "locked": {
-        "lastModified": 1783253708,
-        "narHash": "sha256-atPURKFuA9mcfopC9oR0+cPZM76J/vhzfpTi+2GH8bY=",
-        "ref": "refs/heads/trunk",
-        "rev": "824c3f30a39b60426ff67f4976bbe7f4975b2009",
-        "revCount": 3,
+        "lastModified": 1785011772,
+        "narHash": "sha256-/Y5ZrgbICfHa9ZlFyWZ1QjABnj5uixiprfWeK+s9+6s=",
+        "ref": "trunk",
+        "rev": "13d4cee8448fdb9564e078cd59226ce7e4765409",
+        "revCount": 4,
         "type": "git",
-        "url": "ssh://git@codefloe.com/caniko/rs-harbor-macos-sdk-pin.git"
+        "url": "https://github.com/caniko/rs-harbor-macos-sdk-pin.git"
       },
       "original": {
+        "ref": "trunk",
         "type": "git",
-        "url": "ssh://git@codefloe.com/caniko/rs-harbor-macos-sdk-pin.git"
+        "url": "https://github.com/caniko/rs-harbor-macos-sdk-pin.git"
       }
     },
     "rust-overlay": {
