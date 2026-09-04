@@ -1,5 +1,5 @@
 {
-  rs-harbor,
+  harbor-rs,
   pkgs,
   cross,
   toolchain,
@@ -7,7 +7,7 @@
 }:
 {
   devShells =
-    (rs-harbor.lib.mkDevShells {
+    (harbor-rs.lib.mkDevShells {
       inherit pkgs cross;
       inherit (toolchain) craneLib;
       pkgConfigDeps = [
@@ -34,7 +34,7 @@
       '';
     })
     // {
-      docs = rs-harbor.lib.mkDocsShell {
+      docs = harbor-rs.lib.mkDocsShell {
         inherit pkgs cross;
         inherit (toolchain) craneLib;
         pkgConfigDeps = [

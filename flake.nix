@@ -12,13 +12,15 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    rs-harbor = {
-      url = "git+https://github.com/caniko/rs-harbor.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    harbor-rs = {
+      url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rs-harbor-macos-sdk-pin.url = "git+https://github.com/caniko/rs-harbor-macos-sdk-pin.git?ref=trunk";
-    rust-overlay.follows = "rs-harbor/rust-overlay";
-    crane.follows = "rs-harbor/crane";
+    rs-harbor.follows = "harbor-rs";
+    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
+    rs-harbor-macos-sdk-pin.follows = "harbor-macos-sdk-pin";
+    rust-overlay.follows = "harbor-rs/rust-overlay";
+    crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
     plinth = {
       url = "git+https://codeberg.org/caniko/plinth.git?ref=refs/heads/trunk";
@@ -30,21 +32,21 @@
   outputs = inputs @ {
     self,
     nixpkgs,
-    rs-harbor,
-    rs-harbor-macos-sdk-pin,
+    harbor-rs,
+    harbor-macos-sdk-pin,
     plinth,
     rust-overlay,
     flake-utils,
     ...
   }: let
     mkPerSystem = {
-      macosSdkStorePath ? rs-harbor-macos-sdk-pin.storePath,
-      osxSdkVersion ? rs-harbor-macos-sdk-pin.sdkVersion,
+      macosSdkStorePath ? harbor-macos-sdk-pin.storePath,
+      osxSdkVersion ? harbor-macos-sdk-pin.sdkVersion,
     }: system:
       import ./nix/per-system.nix {
         root = ./.;
         inherit plinth;
-        inherit self nixpkgs rs-harbor rust-overlay system macosSdkStorePath osxSdkVersion;
+        inherit self nixpkgs harbor-rs rust-overlay system macosSdkStorePath osxSdkVersion;
       };
   in
     flake-utils.lib.eachDefaultSystem (mkPerSystem {})

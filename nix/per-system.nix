@@ -3,7 +3,7 @@
   self,
   nixpkgs,
   plinth,
-  rs-harbor,
+  harbor-rs,
   rust-overlay,
   system,
   macosSdkStorePath ? null,
@@ -25,8 +25,8 @@
     overlays = [(import rust-overlay)];
   };
   lib = pkgs.lib;
-  toolchain = rs-harbor.lib.mkToolchain {inherit pkgs; toolchainProfile = "nightly";};
-  cross = rs-harbor.lib.mkCross ({
+  toolchain = harbor-rs.lib.mkToolchain {inherit pkgs; toolchainProfile = "nightly";};
+  cross = harbor-rs.lib.mkCross ({
       inherit pkgs system osxSdkVersion;
     }
     // lib.optionalAttrs (macosSdkStorePath != null) {
@@ -85,7 +85,7 @@
   };
 
   shells = import ./modules/shells.nix {
-    inherit rs-harbor pkgs cross toolchain;
+    inherit harbor-rs pkgs cross toolchain;
     plinthProject = plinth.packages.${system}.plinth-project;
   };
 
