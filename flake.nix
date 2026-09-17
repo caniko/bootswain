@@ -16,9 +16,7 @@
       url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=fac8049316846e0ef1c1e6acd92aed7a337b333a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rs-harbor.follows = "harbor-rs";
     harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
-    rs-harbor-macos-sdk-pin.follows = "harbor-macos-sdk-pin";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
