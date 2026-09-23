@@ -6,6 +6,7 @@ with_audit = true
 with_deny = true
 platform = "github"
 provider = "actions"
+all_features = false
 
 [ci.pages]
 repo = "caniko/bootswain"
