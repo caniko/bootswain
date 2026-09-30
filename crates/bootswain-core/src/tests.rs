@@ -246,6 +246,8 @@ fn sample_manifest() -> FirmwareManifest {
         release: "2026.04-rockpro64.0".into(),
         board: Board::RockPro64,
         sources: FirmwareSourceRevisions {
+            edk2: None,
+            raspberry_pi_firmware: None,
             u_boot: "v2026.04".into(),
             trusted_firmware_a: Some("v2.13.0".into()),
             bootswain: Some("dirty".into()),

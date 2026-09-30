@@ -88,6 +88,14 @@ pub(crate) enum FirmwareCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ProbeCommand {
+    Platform {
+        #[arg(long)]
+        expected_board: bootswain_core::Board,
+        #[arg(long, default_value = "/sys")]
+        sys_root: PathBuf,
+        #[arg(long, default_value = "/proc")]
+        proc_root: PathBuf,
+    },
     Rockpro64Usb {
         #[arg(long)]
         image: PathBuf,

@@ -12,6 +12,7 @@ publish = false
 anyhow.workspace = true
 bootswain-core = { path = "../bootswain-core" }
 serde_json.workspace = true
+serde.workspace = true
 serialport.workspace = true
 
 [dev-dependencies]

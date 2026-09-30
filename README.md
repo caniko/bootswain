@@ -11,6 +11,11 @@ firmware inspection, serial probing, and validation workflows around U-Boot.
 The current focus is ROCKPro64 firmware work, with Raspberry Pi 3 B+ boot
 partition tooling also present as release-candidate support.
 
+Pi 5 U-Boot UEFI and ROCK 5A EDK2 release-candidate artifacts are also available,
+with a board-bound read-only Linux platform probe. See
+[UEFI appliances](docs/src/uefi-appliances.md) for outputs, installation boundaries,
+firmware versions, and the remaining physical qualification gates.
+
 The project is intentionally evidence-gated: release-candidate artifacts are
 easy to build and inspect, but stable support claims require real validation
 data under `validation/<board>/stable/`.

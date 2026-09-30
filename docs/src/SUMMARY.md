@@ -28,6 +28,8 @@
 
 # Validation
 
+- [Pi 5 and ROCK 5A UEFI Appliances](./uefi-appliances.md)
+
 - [Generic ARM64 QEMU](./validation/qemu-arm64.md)
 - [ROCKPro64 Lab Validation](./validation/rockpro64-lab.md)
 - [Stable Evidence](./validation/stable-evidence.md)

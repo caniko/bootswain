@@ -38,6 +38,8 @@ pub enum FirmwareArtifactKind {
     RaspberryPiFirmware,
     Idbloader,
     UBootRpi3,
+    UBootRpi5,
+    UefiFirmware,
     UBootItb,
     UBootRockchip,
     UBootRockchipSpi,
@@ -57,6 +59,8 @@ impl FirmwareArtifactKind {
             Self::RaspberryPiFirmware => "raspberry-pi-firmware",
             Self::Idbloader => "idbloader",
             Self::UBootRpi3 => "u-boot-rpi3",
+            Self::UBootRpi5 => "u-boot-rpi5",
+            Self::UefiFirmware => "uefi-firmware",
             Self::UBootItb => "u-boot-itb",
             Self::UBootRockchip => "u-boot-rockchip",
             Self::UBootRockchipSpi => "u-boot-rockchip-spi",
@@ -85,6 +89,8 @@ impl FromStr for FirmwareArtifactKind {
             "raspberry-pi-firmware" => Ok(Self::RaspberryPiFirmware),
             "idbloader" => Ok(Self::Idbloader),
             "u-boot-rpi3" => Ok(Self::UBootRpi3),
+            "u-boot-rpi5" => Ok(Self::UBootRpi5),
+            "uefi-firmware" => Ok(Self::UefiFirmware),
             "u-boot-itb" => Ok(Self::UBootItb),
             "u-boot-rockchip" => Ok(Self::UBootRockchip),
             "u-boot-rockchip-spi" => Ok(Self::UBootRockchipSpi),
@@ -143,6 +149,10 @@ impl fmt::Display for BootTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FirmwareSourceRevisions {
     pub u_boot: String,
+    #[serde(default)]
+    pub edk2: Option<String>,
+    #[serde(default)]
+    pub raspberry_pi_firmware: Option<String>,
     #[serde(default)]
     pub trusted_firmware_a: Option<String>,
     pub bootswain: Option<String>,

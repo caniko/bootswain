@@ -14,9 +14,7 @@
     config.allowUnfreePredicate = pkg:
       builtins.elem
       (
-        if pkg ? pname
-        then pkg.pname
-        else (builtins.parseDrvName pkg.name).name
+        pkg.pname or (builtins.parseDrvName pkg.name).name
       )
       [
         "arm-trusted-firmware-rk3399"
@@ -24,15 +22,18 @@
       ];
     overlays = [(import rust-overlay)];
   };
-  lib = pkgs.lib;
-  toolchain = harbor-rs.lib.mkToolchain {inherit pkgs; toolchainProfile = "nightly";};
+  inherit (pkgs) lib;
+  toolchain = harbor-rs.lib.mkToolchain {
+    inherit pkgs;
+    toolchainProfile = "nightly";
+  };
   cross = harbor-rs.lib.mkCross ({
       inherit pkgs system osxSdkVersion;
     }
     // lib.optionalAttrs (macosSdkStorePath != null) {
       inherit macosSdkStorePath;
     });
-  craneLib = toolchain.craneLib;
+  inherit (toolchain) craneLib;
   workspaceRoot = toString root;
   src = lib.cleanSourceWith {
     src = root;
@@ -49,6 +50,7 @@
     inherit pkgs;
     inherit root self nixpkgs;
   };
+  uefiArtifacts = import ./modules/uefi-artifacts.nix {inherit pkgs self nixpkgs;};
 
   workspace = import ./modules/workspace.nix {
     inherit pkgs lib craneLib src;
@@ -66,6 +68,7 @@
   flash = import ./modules/flash.nix {
     inherit pkgs;
     inherit (workspace) bootswain;
+    inherit (uefiArtifacts) pi5Bundle rock5aBundle;
     inherit
       (artifacts)
       raspberryPi3BPlusReleaseBundle
@@ -112,7 +115,7 @@
         modules = [
           self.nixosModules.rockpro64
           (
-            {...}: {
+            _: {
               boot.bootswain.rockpro64 = {
                 enable = true;
                 firmwarePackage = fakeFirmwarePackage;
@@ -131,7 +134,7 @@
       modules = [
         self.nixosModules.rockpro64Bootable
         (
-          {...}: {
+          _: {
             boot.bootswain.rockpro64.firmwarePackage = fakeFirmwarePackage;
             fileSystems."/" = {
               device = "none";
@@ -147,7 +150,7 @@
       modules = [
         self.nixosModules.raspberryPi3BPlus
         (
-          {...}: {
+          _: {
             boot.bootswain.raspberryPi3BPlus = {
               enable = true;
               firmwarePackage = fakeRaspberryPi3BPlusFirmwarePackage;
@@ -166,7 +169,7 @@
       modules = [
         self.nixosModules.raspberryPi3BPlusBootable
         (
-          {...}: {
+          _: {
             boot.bootswain.raspberryPi3BPlus.firmwarePackage = fakeRaspberryPi3BPlusFirmwarePackage;
             fileSystems."/" = {
               device = "none";
@@ -284,6 +287,7 @@ in {
   packages =
     workspace.packages
     // artifacts.packages
+    // uefiArtifacts.packages
     // sites.packages
     // {
       inherit website;
@@ -297,11 +301,12 @@ in {
       };
     };
   checks =
-    workspace.checks
+    uefiArtifacts.checks
+    // workspace.checks
     // artifacts.checks
     // flash.checks
     // {
       rockpro64-nixos-module = nixosModuleCheck;
     };
-  devShells = shells.devShells;
+  inherit (shells) devShells;
 }

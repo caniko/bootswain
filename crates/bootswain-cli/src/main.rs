@@ -240,6 +240,20 @@ fn run_firmware(command: FirmwareCommand) -> Result<()> {
 
 fn run_probe(command: ProbeCommand) -> Result<()> {
     match command {
+        ProbeCommand::Platform {
+            expected_board,
+            sys_root,
+            proc_root,
+        } => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&bootswain_probe::probe_platform(
+                    &sys_root,
+                    &proc_root,
+                    expected_board
+                )?)?
+            );
+        }
         ProbeCommand::Rockpro64Usb {
             image,
             port,

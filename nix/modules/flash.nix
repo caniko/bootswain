@@ -1,11 +1,12 @@
 {
   pkgs,
   bootswain,
+  pi5Bundle,
+  rock5aBundle,
   raspberryPi3BPlusReleaseBundle,
   rockpro64ReleaseBundle,
   rockpro64ReleaseBundleExperimental,
-}:
-let
+}: let
   # Flake evaluation ignores untracked files, so keep this in sync with repo-root justfile.
   justfileText = ''
     # List the Nix-built flash targets through the flake app wrapper.
@@ -27,27 +28,28 @@ let
         @XDG_CACHE_HOME="''${XDG_CACHE_HOME:-{{ justfile_directory() }}/.cache}" nix run .#flash -- --target "{{ target }}" --device "{{ device }}" {{ dry_run }} {{ verify }} {{ verify_only }} {{ json }} {{ yes }} {{ allow_non_flashable }}
   '';
 
-  justfileCheck = pkgs.runCommand "justfile-check" {
-    nativeBuildInputs = [ pkgs.just ];
-  } ''
-    mkdir -p "$out"
-    cp ${pkgs.writeText "bootswain-justfile" justfileText} "$TMPDIR/justfile"
+  justfileCheck =
+    pkgs.runCommand "justfile-check" {
+      nativeBuildInputs = [pkgs.just];
+    } ''
+      mkdir -p "$out"
+      cp ${pkgs.writeText "bootswain-justfile" justfileText} "$TMPDIR/justfile"
 
-    just --justfile "$TMPDIR/justfile" --unstable --fmt --check
-    just --justfile "$TMPDIR/justfile" --list > "$out/list.txt"
-    just --justfile "$TMPDIR/justfile" --usage flash > "$out/usage.txt"
+      just --justfile "$TMPDIR/justfile" --unstable --fmt --check
+      just --justfile "$TMPDIR/justfile" --list > "$out/list.txt"
+      just --justfile "$TMPDIR/justfile" --usage flash > "$out/usage.txt"
 
-    grep -q 'flash-targets' "$out/list.txt"
-    grep -q 'flash ' "$out/list.txt"
-    grep -q -- '--target' "$out/usage.txt"
-    grep -q -- '--device' "$out/usage.txt"
-    grep -q -- '--dry-run' "$out/usage.txt"
-    grep -q -- '--verify' "$out/usage.txt"
-    grep -q -- '--verify-only' "$out/usage.txt"
-    grep -q -- '--json' "$out/usage.txt"
-    grep -q -- '--yes' "$out/usage.txt"
-    grep -q -- '--allow-non-flashable' "$out/usage.txt"
-  '';
+      grep -q 'flash-targets' "$out/list.txt"
+      grep -q 'flash ' "$out/list.txt"
+      grep -q -- '--target' "$out/usage.txt"
+      grep -q -- '--device' "$out/usage.txt"
+      grep -q -- '--dry-run' "$out/usage.txt"
+      grep -q -- '--verify' "$out/usage.txt"
+      grep -q -- '--verify-only' "$out/usage.txt"
+      grep -q -- '--json' "$out/usage.txt"
+      grep -q -- '--yes' "$out/usage.txt"
+      grep -q -- '--allow-non-flashable' "$out/usage.txt"
+    '';
 
   flashApp = pkgs.writeShellApplication {
     name = "bootswain-flash";
@@ -57,6 +59,8 @@ let
       show_targets() {
         cat <<'EOF'
       available targets:
+        pi5-boot-partition                    channel: release-candidate artifact: boot-partition-image
+        rock5a-uefi                           channel: release-candidate artifact: uefi-firmware
         raspberrypi3bplus-boot-partition    channel: release-candidate artifact: boot-partition-image
         rockpro64-spi-installer               channel: release-candidate artifact: spi-installer
         rockpro64-spi-installer-experimental  channel: experimental artifact: spi-installer
@@ -147,6 +151,16 @@ let
       esac
 
       case "$target" in
+        pi5-boot-partition)
+          bundle="${pi5Bundle}"
+          artifact="boot-partition-image"
+          channel="release-candidate"
+          ;;
+        rock5a-uefi)
+          bundle="${rock5aBundle}"
+          artifact="uefi-firmware"
+          channel="release-candidate"
+          ;;
         raspberrypi3bplus-boot-partition)
           bundle="${raspberryPi3BPlusReleaseBundle}"
           artifact="boot-partition-image"
@@ -198,7 +212,7 @@ let
     '';
   };
 
-  flashAppWrapperCheck = pkgs.runCommand "flash-app-wrapper-check" { } ''
+  flashAppWrapperCheck = pkgs.runCommand "flash-app-wrapper-check" {} ''
     mkdir -p "$out"
 
     ${flashApp}/bin/bootswain-flash --list-targets > "$out/targets.txt"
@@ -340,8 +354,7 @@ let
       exit 1
     fi
   '';
-in
-{
+in {
   apps = {
     flash = {
       type = "app";
