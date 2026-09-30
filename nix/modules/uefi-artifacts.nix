@@ -79,6 +79,13 @@
       mkdir -p $out
       cp ${image} $out/${filename}
       size=$(stat -c %s $out/${filename})
+      ${pkgs.lib.optionalString (layout.environment_offset_bytes != null) ''
+        # Raw firmware writes must end before the persistent variable region.
+        test "$size" -le ${toString layout.environment_offset_bytes} || {
+          echo "Firmware image overlaps the reserved variable region" >&2
+          exit 1
+        }
+      ''}
       hash=$(sha256sum $out/${filename} | cut -d ' ' -f1)
       jq -n --argjson sources '${builtins.toJSON sources}' \
         --argjson layout '${builtins.toJSON layout}' \
