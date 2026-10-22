@@ -4,14 +4,14 @@ flash-targets:
     @XDG_CACHE_HOME="${XDG_CACHE_HOME:-{{justfile_directory()}}/.cache}" nix run .#flash -- --list-targets
 
 # Flash a release artifact through the existing flake app wrapper.
-[arg("allow_non_flashable", long="allow-non-flashable", value="--allow-non-flashable", help="Allow lab flashing of manifest artifacts not marked flashable")]
 [arg("device", long="device", help="Block device path")]
-[arg("json", long="json", value="--json", help="Emit JSON output")]
 [arg("target", long="target", help="Flash target name")]
 [arg("yes", long="yes", value="--yes", help="Skip confirmation prompt")]
-[arg("verify_only", long="verify-only", value="--verify-only", help="Skip write and only verify")]
-[arg("dry_run", long="dry-run", value="--dry-run", help="Validate without writing")]
+[arg("json", long="json", value="--json", help="Emit JSON output")]
 [arg("verify", long="verify", value="--verify", help="Verify after flashing")]
+[arg("dry_run", long="dry-run", value="--dry-run", help="Validate without writing")]
+[arg("verify_only", long="verify-only", value="--verify-only", help="Skip write and only verify")]
+[arg("allow_non_flashable", long="allow-non-flashable", value="--allow-non-flashable", help="Allow lab flashing of manifest artifacts not marked flashable")]
 flash target device dry_run="" verify="" verify_only="" json="" yes="" allow_non_flashable="":
     @mkdir -p "${XDG_CACHE_HOME:-{{justfile_directory()}}/.cache}"
     @XDG_CACHE_HOME="${XDG_CACHE_HOME:-{{justfile_directory()}}/.cache}" nix run .#flash -- --target "{{ target }}" --device "{{ device }}" {{ dry_run }} {{ verify }} {{ verify_only }} {{ json }} {{ yes }} {{ allow_non_flashable }}
