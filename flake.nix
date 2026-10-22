@@ -6,16 +6,13 @@
   nixConfig = {
     extra-substituters = ["https://attic.candee.baby/harbor-macos-sdk"];
     extra-trusted-public-keys = [
-      "harbor-macos-sdk:ci7MNMkHDqdeTS4aKwzDNEJ1175AbpVUypTRjCJoHDk="
+      "harbor-macos-sdk:MLRX9qZASKwDh48UWON67cvYxfEbqvjfIZQmGwt1v1E="
     ];
   };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    harbor-rs = {
-      url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=fac8049316846e0ef1c1e6acd92aed7a337b333a";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
+    nixpkgs.follows = "harbor-rs/nixpkgs";
     harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
@@ -46,7 +43,7 @@
         inherit self nixpkgs harbor-rs rust-overlay system macosSdkStorePath osxSdkVersion;
       };
   in
-    flake-utils.lib.eachDefaultSystem (mkPerSystem {})
+    flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin"] (mkPerSystem {})
     // {
       lib = {
         inherit mkPerSystem;
