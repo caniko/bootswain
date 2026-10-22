@@ -2,7 +2,7 @@
 
 <!-- simit:badges:start -->
 
-![CI](https://img.shields.io/badge/CI-managed-2088ff) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
+![CI](https://img.shields.io/badge/CI-managed-2088ff) [![Nix](https://img.shields.io/badge/Nix-drift-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
 
 <!-- simit:badges:end -->
 
@@ -10,6 +10,11 @@
 firmware inspection, serial probing, and validation workflows around U-Boot.
 The current focus is ROCKPro64 firmware work, with Raspberry Pi 3 B+ boot
 partition tooling also present as release-candidate support.
+
+Pi 5 U-Boot UEFI and ROCK 5A EDK2 release-candidate artifacts are also available,
+with a board-bound read-only Linux platform probe. See
+[UEFI appliances](docs/src/uefi-appliances.md) for outputs, installation boundaries,
+firmware versions, and the remaining physical qualification gates.
 
 The project is intentionally evidence-gated: release-candidate artifacts are
 easy to build and inspect, but stable support claims require real validation

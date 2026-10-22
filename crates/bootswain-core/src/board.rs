@@ -4,7 +4,11 @@ pub enum Board {
     GenericArm64Qemu,
     #[serde(rename = "raspberry-pi-3-b-plus")]
     RaspberryPi3BPlus,
+    #[serde(rename = "raspberry-pi-5")]
+    RaspberryPi5,
     RockPro64,
+    #[serde(rename = "rock-5a")]
+    Rock5A,
 }
 
 impl Board {
@@ -13,7 +17,9 @@ impl Board {
         match self {
             Self::GenericArm64Qemu => "generic-arm64-qemu",
             Self::RaspberryPi3BPlus => "raspberry-pi-3-b-plus",
+            Self::RaspberryPi5 => "raspberry-pi-5",
             Self::RockPro64 => "rockpro64",
+            Self::Rock5A => "rock-5a",
         }
     }
 }
@@ -34,6 +40,8 @@ impl FromStr for Board {
                 Ok(Self::RaspberryPi3BPlus)
             }
             "rockpro64" | "rock-pro64" => Ok(Self::RockPro64),
+            "raspberry-pi-5" | "raspberrypi5" | "rpi5" | "pi5" => Ok(Self::RaspberryPi5),
+            "rock-5a" | "rock5a" => Ok(Self::Rock5A),
             _ => Err(format!("unknown board: {value}")),
         }
     }
