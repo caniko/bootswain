@@ -18,7 +18,7 @@
     crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
     plinth = {
-      url = "git+https://github.com/caniko/plinth.git?ref=refs/heads/trunk";
+      url = "git+https://github.com/caniko/plinth.git?ref=trunk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
