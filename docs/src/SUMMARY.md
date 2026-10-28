@@ -24,6 +24,7 @@
 
 - [Status and Support Claims](./raspberrypi3bplus/status.md)
 - [Operator Notes](./raspberrypi3bplus/operator-notes.md)
+- [Lab Runbook](./raspberrypi3bplus/lab-runbook.md)
 - [NixOS Integration](./raspberrypi3bplus/nixos.md)
 
 # Validation
