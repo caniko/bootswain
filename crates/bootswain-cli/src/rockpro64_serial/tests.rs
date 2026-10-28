@@ -433,3 +433,53 @@ fn missing_scenario_filter_is_rejected() {
 
     assert!(error.to_string().contains("does not contain scenario"));
 }
+
+struct BrokenSerial;
+
+impl bootswain_probe::SerialIo for BrokenSerial {
+    fn clear(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn read_chunk(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("adapter unplugged"))
+    }
+
+    fn write_all(&mut self, _buffer: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn serial_io_error_is_recorded_and_run_file_still_written() {
+    let tmp = tempdir().expect("tempdir");
+    let config = sample_config(
+        tmp.path().join("out"),
+        vec!["recovery-console".into()],
+        false,
+    );
+
+    let run =
+        run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut BrokenSerial)
+            .expect("run is returned with the failure recorded");
+
+    let outcome = run
+        .outcomes
+        .iter()
+        .find(|outcome| outcome.scenario == "recovery-console")
+        .expect("recovery outcome");
+    assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+    assert!(
+        outcome
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("adapter unplugged"))
+    );
+    assert!(config.out.join("validation-run.json").exists());
+    assert!(config.out.join("recovery-console/serial.log").exists());
+    assert!(!rockpro64_serial_selected_outcomes_passed(&run));
+}

@@ -1,4 +1,5 @@
 use crate::{Board, ImageInfo, read_json_file, write_pretty_json_file};
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,17 @@ pub enum AutobootResult {
     WarnEnumerate,
     NoDevice,
     Other,
+}
+
+impl fmt::Display for AutobootResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Abort => "abort",
+            Self::WarnEnumerate => "warn+enumerate",
+            Self::NoDevice => "no-device",
+            Self::Other => "other",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,16 +107,18 @@ pub struct SummaryResult {
 }
 
 impl SummaryResult {
-    #[must_use]
-    pub fn from_trials(image: &ImageInfo, board: Board, trial_results: Vec<TrialResult>) -> Self {
-        let total_trials = trial_results.len() as u32;
-        let clean_trials = trial_results
-            .iter()
-            .filter(|trial| trial.is_clean())
-            .count() as u32;
+    pub fn from_trials(
+        image: &ImageInfo,
+        board: Board,
+        trial_results: Vec<TrialResult>,
+    ) -> anyhow::Result<Self> {
+        let total_trials =
+            u32::try_from(trial_results.len()).context("trial count does not fit in u32")?;
+        let clean = trial_results.iter().filter(|trial| trial.is_clean()).count();
+        let clean_trials = u32::try_from(clean).context("clean trial count does not fit in u32")?;
         let failing_trials = total_trials.saturating_sub(clean_trials);
 
-        Self {
+        Ok(Self {
             image_path: image.path.clone(),
             image_sha256: image.sha256.clone(),
             board,
@@ -112,14 +126,13 @@ impl SummaryResult {
             clean_trials,
             failing_trials,
             trial_results,
-        }
+        })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UsbProbeValidationPlan {
     pub name: String,
-    #[serde(with = "board_wire")]
     pub board: Board,
     pub image: ImageInfo,
     pub scenarios: Vec<UsbProbeValidationScenario>,
@@ -426,26 +439,5 @@ where
         if actual != expected {
             mismatches.push(format!("{field} expected {expected:?}, got {actual:?}"));
         }
-    }
-}
-
-mod board_wire {
-    use super::Board;
-    use serde::{Deserialize, Deserializer, Serializer, de::Error as _};
-    use std::str::FromStr;
-
-    pub fn serialize<S>(board: &Board, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(board.as_str())
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Board, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        Board::from_str(&value).map_err(D::Error::custom)
     }
 }

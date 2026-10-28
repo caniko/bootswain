@@ -159,12 +159,7 @@ pub fn render_probe_summary_human(summary: &SummaryResult) -> String {
             trial.trial_number,
             if trial.is_clean() { "clean" } else { "failed" },
             trial.failure_stage,
-            match trial.autoboot_result {
-                bootswain_core::AutobootResult::Abort => "abort",
-                bootswain_core::AutobootResult::WarnEnumerate => "warn+enumerate",
-                bootswain_core::AutobootResult::NoDevice => "no-device",
-                bootswain_core::AutobootResult::Other => "other",
-            },
+            trial.autoboot_result,
             trial.usb_start_result,
             trial.usb_tree_result,
             trial.usb_reset_result

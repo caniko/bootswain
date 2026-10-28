@@ -1,8 +1,7 @@
 use anyhow::{Context, Result, bail};
 use bootswain_core::{
     Board, QemuDiskInterface, ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus,
-    ValidationPlan, ValidationRun, ValidationScenario, ValidationScenarioKind,
-    write_pretty_json_file,
+    ValidationPlan, ValidationRun, ValidationScenario, write_pretty_json_file,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -283,7 +282,7 @@ fn evaluate_qemu_scenario(
     output: &QemuProcessOutput,
     logs: &[PathBuf],
 ) -> ValidationOutcome {
-    if is_hardware_only_scenario(scenario) {
+    if scenario.is_destructive_spi() {
         return ValidationOutcome {
             scenario: scenario.name.clone(),
             status: ValidationOutcomeStatus::Unsupported,
@@ -356,13 +355,6 @@ fn evaluate_qemu_scenario(
                 .join(", ")
         )),
     }
-}
-
-fn is_hardware_only_scenario(scenario: &ValidationScenario) -> bool {
-    matches!(
-        scenario.kind,
-        ValidationScenarioKind::SpiInstall | ValidationScenarioKind::SpiErase
-    )
 }
 
 fn expected_patterns(scenario: &ValidationScenario) -> Vec<&str> {

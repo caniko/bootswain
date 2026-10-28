@@ -174,3 +174,14 @@ impl ValidationRun {
             .all(|outcome| outcome.status == ValidationOutcomeStatus::Passed)
     }
 }
+
+impl ValidationScenario {
+    /// Scenarios that rewrite SPI flash; they only make sense on real hardware.
+    #[must_use]
+    pub fn is_destructive_spi(&self) -> bool {
+        matches!(
+            self.kind,
+            ValidationScenarioKind::SpiInstall | ValidationScenarioKind::SpiErase
+        )
+    }
+}

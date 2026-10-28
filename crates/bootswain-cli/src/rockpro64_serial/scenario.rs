@@ -5,10 +5,11 @@ use super::read::{
 use anyhow::{Context, Result};
 use bootswain_core::{
     ValidationExecutorKind, ValidationOutcome, ValidationOutcomeStatus, ValidationPlan,
-    ValidationScenario, ValidationScenarioKind, ValidationStep,
+    ValidationScenario, ValidationStep,
 };
 use bootswain_probe::SerialIo;
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -42,46 +43,51 @@ where
 
     let mut log = String::new();
     let mut evidence = Vec::new();
-    for step in &scenario.steps {
-        match run_step(session, scenario, step, config, &mut log)? {
-            StepResult::Passed(mut step_evidence) => evidence.append(&mut step_evidence),
-            StepResult::Failed(failure) => {
-                fs::write(&serial_log, log.as_bytes())
-                    .with_context(|| format!("failed to write {}", serial_log.display()))?;
-                return Ok(ValidationOutcome {
-                    scenario: scenario.name.clone(),
-                    status: ValidationOutcomeStatus::Failed,
-                    executor: Some(ValidationExecutorKind::RockPro64Serial),
-                    evidence,
-                    logs: vec![relative_log],
-                    failure: Some(failure),
-                });
-            }
-            StepResult::Interrupted => {
-                fs::write(&serial_log, log.as_bytes())
-                    .with_context(|| format!("failed to write {}", serial_log.display()))?;
-                return Ok(ValidationOutcome {
-                    scenario: scenario.name.clone(),
-                    status: ValidationOutcomeStatus::Interrupted,
-                    executor: Some(ValidationExecutorKind::RockPro64Serial),
-                    evidence,
-                    logs: vec![relative_log],
-                    failure: Some("validation interrupted by operator".into()),
-                });
-            }
-        }
-    }
+    let result = run_steps(session, scenario, config, &mut log, &mut evidence);
 
+    // Persist what was captured before reporting, including after an I/O error, so a
+    // failed scenario always leaves its serial log behind.
     fs::write(&serial_log, log.as_bytes())
         .with_context(|| format!("failed to write {}", serial_log.display()))?;
+    let (status, failure) = match result {
+        Ok(StepResult::Passed(_)) => (ValidationOutcomeStatus::Passed, None),
+        Ok(StepResult::Failed(failure)) => (ValidationOutcomeStatus::Failed, Some(failure)),
+        Ok(StepResult::Interrupted) => (
+            ValidationOutcomeStatus::Interrupted,
+            Some("validation interrupted by operator".into()),
+        ),
+        Err(error) => (
+            ValidationOutcomeStatus::Failed,
+            Some(format!("{}: {error:#}", scenario.name)),
+        ),
+    };
     Ok(ValidationOutcome {
         scenario: scenario.name.clone(),
-        status: ValidationOutcomeStatus::Passed,
+        status,
         executor: Some(ValidationExecutorKind::RockPro64Serial),
         evidence,
         logs: vec![relative_log],
-        failure: None,
+        failure,
     })
+}
+
+fn run_steps<T>(
+    session: &mut T,
+    scenario: &ValidationScenario,
+    config: &RockPro64SerialRunConfig,
+    log: &mut String,
+    evidence: &mut Vec<String>,
+) -> Result<StepResult>
+where
+    T: SerialIo,
+{
+    for step in &scenario.steps {
+        match run_step(session, scenario, step, config, log)? {
+            StepResult::Passed(mut step_evidence) => evidence.append(&mut step_evidence),
+            terminal => return Ok(terminal),
+        }
+    }
+    Ok(StepResult::Passed(Vec::new()))
 }
 
 enum StepResult {
@@ -115,8 +121,7 @@ where
         ),
     );
     if let Some(command) = &step.command {
-        let mut prompt_segment = String::new();
-        match read_until_patterns(
+        let prompt_read = read_until_patterns(
             session,
             ReadOptions {
                 timeout,
@@ -129,11 +134,12 @@ where
             },
             &config.cancellation,
             log,
-            &mut prompt_segment,
             &["=> ".to_owned()],
-        )? {
+        )?;
+        match prompt_read.status {
             ReadStatus::Matched => {
-                if command_step_allows_precommand_match(scenario)
+                let prompt_segment = prompt_read.segment(log);
+                if !scenario.is_destructive_spi()
                     && step
                         .expect
                         .iter()
@@ -171,7 +177,7 @@ where
             ReadStatus::Interrupted => return Ok(StepResult::Interrupted),
         }
 
-        log.push_str(&format!("\n# bootswain sent: {command}\n"));
+        let _ = write!(log, "\n# bootswain sent: {command}\n");
         progressln(config, &format!("step {}: sending `{command}`", step.name));
         session
             .write_all(format!("{command}\n").as_bytes())
@@ -182,14 +188,14 @@ where
     }
 
     if step.command.is_none() && step.expect.iter().any(|pattern| pattern == "=> ") {
-        log.push_str(&format!(
+        let _ = write!(
+            log,
             "\n# bootswain waiting for U-Boot prompt for {}\n",
             step.name
-        ));
+        );
     }
 
-    let mut step_segment = String::new();
-    match read_until_patterns(
+    let step_read = read_until_patterns(
         session,
         ReadOptions {
             timeout,
@@ -202,9 +208,9 @@ where
         },
         &config.cancellation,
         log,
-        &mut step_segment,
         &step.expect,
-    )? {
+    )?;
+    match step_read.status {
         ReadStatus::Matched => Ok(StepResult::Passed(
             step.expect
                 .iter()
@@ -233,10 +239,11 @@ fn clear_stale_input_before_command<T>(
 where
     T: SerialIo,
 {
-    log.push_str(&format!(
+    let _ = write!(
+        log,
         "\n# bootswain cleared stale serial input before command for {}\n",
         step.name
-    ));
+    );
     session
         .clear()
         .with_context(|| format!("failed to clear serial input before step {}", step.name))
@@ -267,17 +274,6 @@ pub(super) fn progressln(config: &RockPro64SerialRunConfig, message: &str) {
     if config.progress_interval > Duration::ZERO {
         eprintln!("bootswain: {message}");
     }
-}
-
-pub(super) fn is_destructive_spi_scenario(scenario: &ValidationScenario) -> bool {
-    matches!(
-        scenario.kind,
-        ValidationScenarioKind::SpiInstall | ValidationScenarioKind::SpiErase
-    )
-}
-
-fn command_step_allows_precommand_match(scenario: &ValidationScenario) -> bool {
-    !is_destructive_spi_scenario(scenario)
 }
 
 fn safe_path_segment(value: &str) -> String {

@@ -13,7 +13,7 @@ use std::time::Duration;
 mod read;
 mod scenario;
 
-use scenario::{is_destructive_spi_scenario, progressln, run_scenario, selected_timeout_secs};
+use scenario::{progressln, run_scenario, selected_timeout_secs};
 
 #[derive(Debug, Clone)]
 pub struct RockPro64SerialRunConfig {
@@ -88,7 +88,7 @@ where
             continue;
         }
 
-        if is_destructive_spi_scenario(scenario) && !config.allow_destructive_spi {
+        if scenario.is_destructive_spi() && !config.allow_destructive_spi {
             outcomes.push(ValidationOutcome {
                 scenario: scenario.name.clone(),
                 status: ValidationOutcomeStatus::Skipped,

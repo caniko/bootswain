@@ -196,7 +196,7 @@ fn validation_plan_loader_rejects_unknown_board() {
     .expect("write bad plan");
 
     let error = load_validation_plan_json(&plan_path).expect_err("bad board rejected");
-    assert!(error.to_string().contains("unknown board"));
+    assert!(error.to_string().contains("unknown variant"));
 }
 
 #[test]

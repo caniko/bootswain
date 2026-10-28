@@ -6,7 +6,9 @@ mod serial;
 mod validation;
 
 pub use parser::{
-    classify_autoboot, extract_last_usb_tree_summary, segment_has_prompt, segment_has_reset,
+    MAX_MARKER_LEN, Utf8Accumulator, classify_autoboot, extract_last_usb_tree_summary,
+    rescan_start, segment_has_boot_banner, segment_has_prompt, segment_has_prompt_in,
+    segment_has_reset,
 };
 pub use platform::{PlatformProbe, probe_platform};
 pub use runner::{ProbeConfig, run_rockpro64_usb_probe, run_trial_with_session};
