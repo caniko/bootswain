@@ -2,7 +2,6 @@
   config,
   lib,
   pkgs,
-  crossbowCrossPkgs ? null,
   ...
 }: let
   cfg = config.boot.bootswain.rockpro64;
@@ -14,11 +13,7 @@
     else "efi";
   usesEfi = effectiveOsBootProtocol == "efi";
   usesExtlinux = effectiveOsBootProtocol == "extlinux";
-  firmwarePackageSystem =
-    if crossbowCrossPkgs != null
-    then crossbowCrossPkgs.stdenv.buildPlatform.system
-    else pkgs.stdenv.hostPlatform.system;
-  defaultFirmwarePackage = self.packages.${firmwarePackageSystem}.rockpro64-spi-firmware;
+  defaultFirmwarePackage = self.packages.${pkgs.stdenv.buildPlatform.system}.rockpro64-spi-firmware;
   removableEfiLoader = "${config.systemd.package}/lib/systemd/boot/efi/systemd-bootaa64.efi";
   nixosDtb = "rockchip/rk3399-rockpro64.dtb";
   nixosDtbPath = "${config.hardware.deviceTree.package}/${nixosDtb}";
@@ -84,7 +79,7 @@ in {
     firmwarePackage = lib.mkOption {
       type = lib.types.package;
       default = defaultFirmwarePackage;
-      defaultText = lib.literalExpression "bootswain.packages.\${pkgs.stdenv.hostPlatform.system}.rockpro64-spi-firmware";
+      defaultText = lib.literalExpression "bootswain.packages.\${pkgs.stdenv.buildPlatform.system}.rockpro64-spi-firmware";
       description = ''
         Bootswain ROCKPro64 firmware package containing the NixOS updater boot script and SPI payload.
       '';
