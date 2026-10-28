@@ -392,3 +392,43 @@ fn real_device_host_uses_block_device_metadata() {
             .expect("block device metadata")
     );
 }
+
+#[test]
+fn zstd_decoded_size_larger_than_device_is_rejected() {
+    let tmp = tempdir().expect("tempdir");
+    let path = tmp.path().join("big.img.zst");
+    let payload = vec![0_u8; 1 << 20];
+    let mut encoder =
+        zstd::stream::Encoder::new(fs::File::create(&path).expect("create"), 0).expect("encoder");
+    encoder
+        .set_pledged_src_size(Some(payload.len() as u64))
+        .expect("pledge");
+    std::io::Write::write_all(&mut encoder, &payload).expect("encode");
+    encoder.finish().expect("finish");
+
+    let image = ImageInfo {
+        size_bytes: fs::metadata(&path).expect("metadata").len(),
+        path,
+        compression: CompressionKind::Zstd,
+        sha256: String::new(),
+    };
+    let device = super::ValidatedBlockDevice {
+        info: bootswain_core::BlockDeviceInfo {
+            original_path: PathBuf::from("/dev/sdb"),
+            canonical_path: PathBuf::from("/dev/sdb"),
+            block_name: "sdb".into(),
+            kind: BlockDeviceKind::Disk,
+            size_bytes: Some(64 * 1024),
+            removable: Some(true),
+            model: None,
+            vendor: None,
+        },
+    };
+    let plan = plan_flash(&image, &device, true);
+
+    // The compressed file fits; the decoded payload does not.
+    assert!(image.size_bytes < 64 * 1024);
+    let required = crate::payload_size_bytes(&plan.image).expect("payload size");
+    let error = validate_required_device_size(&plan, required).expect_err("too small");
+    assert!(error.to_string().contains("too small"));
+}

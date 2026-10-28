@@ -135,6 +135,7 @@ dependencies = [
  "anyhow",
  "bootswain-core",
  "hex",
+ "rustix",
  "sha2",
  "tempfile",
  "zstd",

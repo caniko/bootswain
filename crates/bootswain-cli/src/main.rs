@@ -15,7 +15,7 @@ use bootswain_core::{
     ValidationOutcomeStatus, ValidationPlan, ValidationRun, read_json_file, write_pretty_json_file,
 };
 use bootswain_flash::{
-    execute_flash, inspect_image, plan_flash, validate_required_device_size,
+    execute_flash, inspect_image, payload_size_bytes, plan_flash, validate_required_device_size,
     validate_target_device, verify_flash,
 };
 use bootswain_probe::{ProbeConfig, run_rockpro64_usb_probe};
@@ -130,19 +130,33 @@ fn run_flash(command: FlashCommand) -> Result<()> {
             }
             let validated = validate_target_device(&device)?;
             let plan = plan_flash(&image_info, &validated, dry_run);
-            if let Some((_, artifact)) = &selected_artifact {
-                let required_bytes = artifact
-                    .required_device_size_bytes
-                    .unwrap_or(plan.image.size_bytes);
-                validate_required_device_size(&plan, required_bytes)?;
-            }
+            // size_bytes is the compressed size for .zst, so check the decoded payload.
+            let required_bytes = match selected_artifact
+                .as_ref()
+                .and_then(|(_, artifact)| artifact.required_device_size_bytes)
+            {
+                Some(bytes) => bytes,
+                None => payload_size_bytes(&plan.image)?,
+            };
+            validate_required_device_size(&plan, required_bytes)?;
 
             if !json {
                 print!("{}", render_flash_plan_human(&plan));
             }
 
-            if !dry_run && !verify_only && !yes {
-                confirm_device_write(&plan.device.canonical_path, json)?;
+            if !dry_run && !verify_only {
+                if !yes {
+                    confirm_device_write(&plan.device.canonical_path, json)?;
+                }
+                // The operator may have mounted the disk while the prompt was open.
+                let revalidated = validate_target_device(&device)?;
+                if revalidated.info.canonical_path != plan.device.canonical_path {
+                    bail!(
+                        "target device changed from {} to {} during confirmation",
+                        plan.device.canonical_path.display(),
+                        revalidated.info.canonical_path.display()
+                    );
+                }
             }
 
             let execution = if verify_only {
@@ -158,12 +172,13 @@ fn run_flash(command: FlashCommand) -> Result<()> {
             } else {
                 None
             };
+            let result = FlashRunResult {
+                execution,
+                verification,
+            };
+            let device_path = &result.execution.plan.device.canonical_path;
             if json {
-                if verification.is_some() {
-                    let result = FlashRunResult {
-                        execution: execution.clone(),
-                        verification: verification.clone(),
-                    };
+                if result.verification.is_some() {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&result)
@@ -176,30 +191,20 @@ fn run_flash(command: FlashCommand) -> Result<()> {
                             .context("failed to render flash JSON")?
                     );
                 }
-                if let Some(bytes_written) = execution.bytes_written {
-                    eprintln!(
-                        "wrote {} bytes to {}",
-                        bytes_written,
-                        execution.plan.device.canonical_path.display()
-                    );
+                if let Some(bytes_written) = result.execution.bytes_written {
+                    eprintln!("wrote {} bytes to {}", bytes_written, device_path.display());
                 }
             } else {
-                if let Some(bytes_written) = execution.bytes_written {
-                    println!(
-                        "wrote {} bytes to {}",
-                        bytes_written,
-                        execution.plan.device.canonical_path.display()
-                    );
+                if let Some(bytes_written) = result.execution.bytes_written {
+                    println!("wrote {} bytes to {}", bytes_written, device_path.display());
                 }
-                if let Some(verification) = &verification {
+                if let Some(verification) = &result.verification {
                     print!("{}", render_flash_verification_human(verification));
                 }
             }
 
-            if let Some(verification) = verification {
-                if !verification.matched {
-                    bail!("flash verification failed");
-                }
+            if result.verification.is_some_and(|verification| !verification.matched) {
+                bail!("flash verification failed");
             }
         }
     }

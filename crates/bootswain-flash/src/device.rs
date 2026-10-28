@@ -5,10 +5,12 @@ use bootswain_core::{
 };
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufWriter, Read, Write};
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use zstd::stream::read::Decoder;
+
+const WRITE_BUFFER_BYTES: usize = 1 << 20;
 
 #[derive(Debug, Clone)]
 pub struct LinuxPaths {
@@ -112,53 +114,55 @@ pub fn plan_flash(image: &ImageInfo, device: &ValidatedBlockDevice, dry_run: boo
 }
 
 pub fn execute_flash(plan: &FlashPlan) -> Result<u64> {
-    let input = File::open(&plan.image.path)
-        .with_context(|| format!("failed to open image {}", plan.image.path.display()))?;
+    let mut reader = artifact_payload_reader(plan)?;
 
-    let mut reader: Box<dyn Read> = match plan.strategy {
-        FlashStrategy::RawCopy => Box::new(BufReader::new(input)),
-        FlashStrategy::ZstdDecompress => Box::new(
-            Decoder::new(BufReader::new(input))
-                .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
-        ),
-    };
-
-    let mut output = OpenOptions::new()
+    let device_path = &plan.device.canonical_path;
+    let output = OpenOptions::new()
         .write(true)
-        .open(&plan.device.canonical_path)
-        .with_context(|| {
-            format!(
-                "failed to open device {}",
-                plan.device.canonical_path.display()
-            )
-        })?;
+        .open(device_path)
+        .with_context(|| format!("failed to open device {}", device_path.display()))?;
 
-    let bytes_written = io::copy(&mut reader, &mut output).with_context(|| {
-        format!(
-            "failed while writing {}",
-            plan.device.canonical_path.display()
-        )
-    })?;
+    // io::copy alone issues 8 KiB writes, which is slow on block devices.
+    let mut output = BufWriter::with_capacity(WRITE_BUFFER_BYTES, output);
+    let bytes_written = io::copy(&mut reader, &mut output)
+        .with_context(|| format!("failed while writing {}", device_path.display()))?;
     output
         .flush()
-        .with_context(|| format!("failed to flush {}", plan.device.canonical_path.display()))?;
+        .with_context(|| format!("failed to flush {}", device_path.display()))?;
+    let output = output
+        .into_inner()
+        .map_err(io::IntoInnerError::into_error)
+        .with_context(|| format!("failed to flush {}", device_path.display()))?;
     output
         .sync_all()
-        .with_context(|| format!("failed to sync {}", plan.device.canonical_path.display()))?;
+        .with_context(|| format!("failed to sync {}", device_path.display()))?;
 
     Ok(bytes_written)
 }
 
 pub fn verify_flash(plan: &FlashPlan) -> Result<FlashVerificationResult> {
     let mut expected = artifact_payload_reader(plan)?;
-    let mut actual =
-        BufReader::new(File::open(&plan.device.canonical_path).with_context(|| {
-            format!(
-                "failed to open device {} for verification",
-                plan.device.canonical_path.display()
-            )
-        })?);
+    let mut actual = File::open(&plan.device.canonical_path).with_context(|| {
+        format!(
+            "failed to open device {} for verification",
+            plan.device.canonical_path.display()
+        )
+    })?;
+    // Drop cached pages so the read-back comes from the medium, not the page cache.
+    rustix::fs::fadvise(&actual, 0, None, rustix::fs::Advice::DontNeed).with_context(|| {
+        format!(
+            "failed to drop page cache for {}",
+            plan.device.canonical_path.display()
+        )
+    })?;
 
+    let result = |verified_bytes, matched| FlashVerificationResult {
+        image_path: plan.image.path.clone(),
+        device_path: plan.device.canonical_path.clone(),
+        strategy: plan.strategy,
+        verified_bytes,
+        matched,
+    };
     let mut expected_buffer = [0_u8; 64 * 1024];
     let mut actual_buffer = [0_u8; 64 * 1024];
     let mut verified_bytes = 0_u64;
@@ -171,45 +175,26 @@ pub fn verify_flash(plan: &FlashPlan) -> Result<FlashVerificationResult> {
             )
         })?;
         if expected_read == 0 {
-            return Ok(FlashVerificationResult {
-                image_path: plan.image.path.clone(),
-                device_path: plan.device.canonical_path.clone(),
-                strategy: plan.strategy,
-                verified_bytes,
-                matched: true,
-            });
+            return Ok(result(verified_bytes, true));
         }
 
-        let mut actual_read_total = 0;
-        while actual_read_total < expected_read {
-            let read = actual
-                .read(&mut actual_buffer[actual_read_total..expected_read])
-                .with_context(|| {
+        match actual.read_exact(&mut actual_buffer[..expected_read]) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
+                return Ok(result(verified_bytes, false));
+            }
+            Err(error) => {
+                return Err(error).with_context(|| {
                     format!(
                         "failed to read {} during verification",
                         plan.device.canonical_path.display()
                     )
-                })?;
-            if read == 0 {
-                return Ok(FlashVerificationResult {
-                    image_path: plan.image.path.clone(),
-                    device_path: plan.device.canonical_path.clone(),
-                    strategy: plan.strategy,
-                    verified_bytes,
-                    matched: false,
                 });
             }
-            actual_read_total += read;
         }
 
         if expected_buffer[..expected_read] != actual_buffer[..expected_read] {
-            return Ok(FlashVerificationResult {
-                image_path: plan.image.path.clone(),
-                device_path: plan.device.canonical_path.clone(),
-                strategy: plan.strategy,
-                verified_bytes,
-                matched: false,
-            });
+            return Ok(result(verified_bytes, false));
         }
 
         verified_bytes += expected_read as u64;
@@ -235,9 +220,10 @@ fn artifact_payload_reader(plan: &FlashPlan) -> Result<Box<dyn Read>> {
         .with_context(|| format!("failed to open image {}", plan.image.path.display()))?;
 
     match plan.strategy {
-        FlashStrategy::RawCopy => Ok(Box::new(BufReader::new(input))),
+        FlashStrategy::RawCopy => Ok(Box::new(input)),
+        // Decoder::new buffers its input itself.
         FlashStrategy::ZstdDecompress => Ok(Box::new(
-            Decoder::new(BufReader::new(input))
+            Decoder::new(input)
                 .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
         )),
     }
