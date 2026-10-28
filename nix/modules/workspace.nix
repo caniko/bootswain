@@ -125,7 +125,7 @@ let
       grep -q 'trusted-firmware-a: not-applicable' "$out/inspect.txt"
       grep -q 'spi-size-bytes: not-applicable' "$out/inspect.txt"
       grep -q 'artifacts: 3' "$out/inspect.txt"
-      grep -q 'boot-partition-image: boot-partition.img' "$out/artifacts.txt"
+      grep -q 'sd-card-image: sd-card.img' "$out/artifacts.txt"
       grep -q 'raspberry-pi-firmware: raspberry-pi-firmware.tar' "$out/artifacts.txt"
       grep -q 'u-boot-rpi3: u-boot-rpi3.bin' "$out/artifacts.txt"
       grep -q 'flashable: yes' "$out/artifacts.txt"
