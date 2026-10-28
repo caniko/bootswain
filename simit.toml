@@ -1,17 +1,10 @@
 [ci]
 runtime = "nix"
 runner = "ubuntu-24.04"
-workspace = true
-with_audit = true
-with_deny = true
 platform = "github"
 provider = "actions"
-all_features = false
+qualified_by = "caniko/fleet"
 
 [ci.pages]
 repo = "caniko/bootswain"
 canonical_domain = "bootswain.tartanoglu.com"
-
-[ci.cache]
-substituters = ["https://attic.candee.baby/canix", "https://cache.nixos.org"]
-trusted_public_keys = ["canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8=", "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="]

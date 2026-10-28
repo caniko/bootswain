@@ -1,19 +1,9 @@
 {
   description = "bootswain — ROCKPro64-first host-side flash and probe tooling plus firmware scaffolding";
 
-  # Advertise the private macOS SDK Attic cache so darwin cross-compiles
-  # substitute the realized SDK from the pin instead of rebuilding it.
-  nixConfig = {
-    extra-substituters = ["https://attic.candee.baby/harbor-macos-sdk"];
-    extra-trusted-public-keys = [
-      "harbor-macos-sdk:MLRX9qZASKwDh48UWON67cvYxfEbqvjfIZQmGwt1v1E="
-    ];
-  };
-
   inputs = {
     harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
     nixpkgs.follows = "harbor-rs/nixpkgs";
-    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
@@ -27,15 +17,15 @@
     self,
     nixpkgs,
     harbor-rs,
-    harbor-macos-sdk-pin,
     plinth,
     rust-overlay,
     flake-utils,
     ...
   }: let
+    # Optional macOS SDK (store path + version) for darwin cross builds; omitted by default.
     mkPerSystem = {
-      macosSdkStorePath ? harbor-macos-sdk-pin.storePath,
-      osxSdkVersion ? harbor-macos-sdk-pin.sdkVersion,
+      macosSdkStorePath ? null,
+      osxSdkVersion ? "26.1",
     }: system:
       import ./nix/per-system.nix {
         root = ./.;
