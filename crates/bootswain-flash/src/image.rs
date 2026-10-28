@@ -41,11 +41,25 @@ pub fn detect_compression(path: &Path) -> Result<CompressionKind> {
     }
 }
 
+/// sha2 0.11 dropped its `io::Write` impl; this keeps `io::copy` doing the buffering.
+struct HashWriter<'a>(&'a mut Sha256);
+
+impl io::Write for HashWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.update(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file =
         File::open(path).with_context(|| format!("failed to open image {}", path.display()))?;
     let mut hasher = Sha256::new();
-    io::copy(&mut file, &mut hasher)
+    io::copy(&mut file, &mut HashWriter(&mut hasher))
         .with_context(|| format!("failed to read {}", path.display()))?;
 
     Ok(hex::encode(hasher.finalize()))

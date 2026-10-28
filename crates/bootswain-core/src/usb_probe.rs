@@ -435,9 +435,9 @@ fn check_expected<T>(field: &str, expected: Option<T>, actual: T, mismatches: &m
 where
     T: PartialEq + fmt::Debug,
 {
-    if let Some(expected) = expected {
-        if actual != expected {
-            mismatches.push(format!("{field} expected {expected:?}, got {actual:?}"));
-        }
+    if let Some(expected) = expected
+        && actual != expected
+    {
+        mismatches.push(format!("{field} expected {expected:?}, got {actual:?}"));
     }
 }

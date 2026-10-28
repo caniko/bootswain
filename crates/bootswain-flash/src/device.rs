@@ -202,14 +202,12 @@ pub fn verify_flash(plan: &FlashPlan) -> Result<FlashVerificationResult> {
 }
 
 pub fn validate_required_device_size(plan: &FlashPlan, required_bytes: u64) -> Result<()> {
-    if let Some(device_size) = plan.device.size_bytes {
-        if device_size < required_bytes {
-            bail!(
-                "target device is too small: {} bytes available, {} bytes required",
-                device_size,
-                required_bytes
-            );
-        }
+    if let Some(device_size) = plan.device.size_bytes
+        && device_size < required_bytes
+    {
+        bail!(
+            "target device is too small: {device_size} bytes available, {required_bytes} bytes required"
+        );
     }
 
     Ok(())
