@@ -2,14 +2,14 @@
   "schema_version": 1,
   "board": "raspberry-pi-3-b-plus",
   "release": "2026.04-raspberrypi3bplus-lab.0",
-  "executor": "deferred",
+  "executor": "u-boot-serial",
   "scenarios": [
     {
       "name": "serial-u-boot-prompt",
       "kind": "prompt",
       "target": "sd",
       "protocol": "u-boot-shell",
-      "artifact": "boot-partition-image",
+      "artifact": "sd-card-image",
       "steps": [
         {
           "name": "wait for u-boot prompt",
@@ -20,17 +20,38 @@
       ]
     },
     {
+      "name": "family-dtb-check",
+      "kind": "prompt",
+      "target": "sd",
+      "protocol": "u-boot-shell",
+      "artifact": "sd-card-image",
+      "steps": [
+        {
+          "name": "print board model from the firmware DTB",
+          "command": "fdt addr ${fdt_addr}; fdt print /model",
+          "expect": ["Raspberry Pi 3 Model B Plus"],
+          "timeout_secs": 15
+        }
+      ]
+    },
+    {
       "name": "sd-extlinux-boot",
       "kind": "extlinux-boot",
       "target": "sd",
       "protocol": "extlinux",
-      "artifact": "boot-partition-image",
+      "artifact": "sd-card-image",
       "steps": [
         {
           "name": "boot extlinux from sd",
           "command": "bootflow scan -lb mmc0",
-          "expect": ["Booting"],
+          "expect": ["Starting kernel"],
           "timeout_secs": 60
+        },
+        {
+          "name": "wait for login prompt",
+          "command": null,
+          "expect": ["login:"],
+          "timeout_secs": 240
         }
       ]
     },
@@ -39,13 +60,19 @@
       "kind": "extlinux-boot",
       "target": "usb",
       "protocol": "extlinux",
-      "artifact": "boot-partition-image",
+      "artifact": "sd-card-image",
       "steps": [
         {
           "name": "boot extlinux from usb",
           "command": "usb start; bootflow scan -lb usb0",
-          "expect": ["Booting"],
+          "expect": ["Starting kernel"],
           "timeout_secs": 60
+        },
+        {
+          "name": "wait for login prompt",
+          "command": null,
+          "expect": ["login:"],
+          "timeout_secs": 240
         }
       ]
     }

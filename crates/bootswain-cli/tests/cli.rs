@@ -268,7 +268,7 @@ fn validate_qemu_arm64_rejects_rockpro64_lab_plan() {
 }
 
 #[test]
-fn validate_rockpro64_serial_rejects_missing_scenario_before_port_open() {
+fn validate_serial_rejects_missing_scenario_before_port_open() {
     let tmp = tempdir().expect("tempdir");
     let plan = tmp.path().join("rockpro64-serial-plan.json");
     fs::write(&plan, sample_rockpro64_serial_plan_json()).expect("write rockpro64 serial plan");
@@ -277,7 +277,7 @@ fn validate_rockpro64_serial_rejects_missing_scenario_before_port_open() {
         .expect("bootswain binary")
         .args([
             "validate",
-            "rockpro64-serial",
+            "serial",
             "--plan",
             plan.to_str().expect("utf8 plan path"),
             "--port",
@@ -296,7 +296,7 @@ fn validate_rockpro64_serial_rejects_missing_scenario_before_port_open() {
 }
 
 #[test]
-fn validate_rockpro64_serial_requires_serial_executor_before_port_open() {
+fn validate_serial_requires_serial_executor_before_port_open() {
     let tmp = tempdir().expect("tempdir");
     let plan = tmp.path().join("rockpro64-plan.json");
     fs::write(&plan, sample_validation_plan_json()).expect("write rockpro64 plan");
@@ -305,7 +305,7 @@ fn validate_rockpro64_serial_requires_serial_executor_before_port_open() {
         .expect("bootswain binary")
         .args([
             "validate",
-            "rockpro64-serial",
+            "serial",
             "--plan",
             plan.to_str().expect("utf8 plan path"),
             "--port",
@@ -320,7 +320,7 @@ fn validate_rockpro64_serial_requires_serial_executor_before_port_open() {
         .clone();
 
     let stderr = String::from_utf8(output).expect("stderr utf8");
-    assert!(stderr.contains("requires executor rockpro64-serial"));
+    assert!(stderr.contains("requires executor u-boot-serial"));
 }
 
 #[test]
@@ -373,4 +373,47 @@ fn rockpro64_lab_fixture_covers_release_claim_scenarios() {
             "missing required scenario {name}"
         );
     }
+}
+
+#[test]
+fn legacy_rockpro64_serial_subcommand_alias_still_parses() {
+    let tmp = tempdir().expect("tempdir");
+    let plan = tmp.path().join("rockpro64-serial-plan.json");
+    fs::write(&plan, sample_rockpro64_serial_plan_json()).expect("write plan");
+
+    let stderr = Command::cargo_bin("bootswain")
+        .expect("bootswain binary")
+        .args([
+            "validate",
+            "rockpro64-serial",
+            "--plan",
+            plan.to_str().expect("utf8 plan path"),
+            "--port",
+            "/dev/bootswain-missing-tty",
+            "--scenario",
+            "missing",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+
+    assert!(String::from_utf8(stderr).expect("utf8").contains("does not contain scenario"));
+}
+
+#[test]
+fn raspberrypi3bplus_lab_fixture_uses_the_generic_serial_executor() {
+    let plan = load_repo_validation_plan("validation/raspberrypi3bplus/lab-plan.json");
+    let expected = [
+        "serial-u-boot-prompt",
+        "family-dtb-check",
+        "sd-extlinux-boot",
+        "usb-extlinux-boot",
+    ];
+
+    assert_eq!(plan.board, Board::RaspberryPi3BPlus);
+    assert_eq!(plan.executor, ValidationExecutorKind::UBootSerial);
+    let names: Vec<_> = plan.scenarios.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, expected);
 }

@@ -4,9 +4,9 @@ use bootswain_cli::{
     render_firmware_artifacts_human, render_firmware_manifest_human, render_flash_plan_human,
     render_flash_verification_human, render_image_info_human, render_probe_summary_human,
     render_validation_run_human,
-    rockpro64_serial::{
-        RockPro64SerialRunConfig, rockpro64_serial_selected_outcomes_passed,
-        run_rockpro64_serial_validation,
+    uboot_serial::{
+        SerialRunConfig, serial_selected_outcomes_passed,
+        run_serial_validation,
     },
     run_flash_execution,
 };
@@ -375,7 +375,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 bail!("QEMU validation failed");
             }
         }
-        ValidateCommand::Rockpro64Serial {
+        ValidateCommand::Serial {
             plan,
             port,
             baud,
@@ -391,7 +391,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
             }
             let cancellation = Arc::new(AtomicBool::new(false));
             install_validation_interrupt_handler(cancellation.clone())?;
-            let config = RockPro64SerialRunConfig {
+            let config = SerialRunConfig {
                 port,
                 baud,
                 out: out.clone(),
@@ -402,7 +402,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 max_step_timeout: max_step_timeout_secs.map(Duration::from_secs),
                 cancellation,
             };
-            let run = run_rockpro64_serial_validation(plan, &config)?;
+            let run = run_serial_validation(plan, &config)?;
 
             if json {
                 println!(
@@ -422,15 +422,15 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 );
             }
 
-            if !rockpro64_serial_selected_outcomes_passed(&run) {
+            if !serial_selected_outcomes_passed(&run) {
                 if run
                     .outcomes
                     .iter()
                     .any(|outcome| outcome.status == ValidationOutcomeStatus::Interrupted)
                 {
-                    bail!("ROCKPro64 serial validation interrupted");
+                    bail!("{} serial validation interrupted", run.plan.board);
                 }
-                bail!("ROCKPro64 serial validation failed");
+                bail!("{} serial validation failed", run.plan.board);
             }
         }
     }

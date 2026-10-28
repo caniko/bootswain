@@ -16,7 +16,7 @@ mod scenario;
 use scenario::{progressln, run_scenario, selected_timeout_secs};
 
 #[derive(Debug, Clone)]
-pub struct RockPro64SerialRunConfig {
+pub struct SerialRunConfig {
     pub port: String,
     pub baud: u32,
     pub out: PathBuf,
@@ -28,37 +28,54 @@ pub struct RockPro64SerialRunConfig {
     pub cancellation: Arc<AtomicBool>,
 }
 
-pub fn run_rockpro64_serial_validation(
+pub fn run_serial_validation(
     plan: ValidationPlan,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
 ) -> Result<ValidationRun> {
-    validate_plan_for_rockpro64_serial(&plan)?;
-    let _ = selected_scenarios(&plan, &config.selected_scenarios)?;
+    // Validate before touching the port.
+    let selected = prepare(&plan, config)?;
     let mut serial = RealSerial::open(&config.port, config.baud)?;
-    run_rockpro64_serial_validation_with_session(plan, config, &mut serial)
+    execute(plan, config, &mut serial, &selected)
 }
 
-pub fn run_rockpro64_serial_validation_with_session<T>(
+pub fn run_serial_validation_with_session<T>(
     plan: ValidationPlan,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
     session: &mut T,
 ) -> Result<ValidationRun>
 where
     T: SerialIo,
 {
-    validate_plan_for_rockpro64_serial(&plan)?;
+    let selected = prepare(&plan, config)?;
+    execute(plan, config, session, &selected)
+}
+
+fn prepare(plan: &ValidationPlan, config: &SerialRunConfig) -> Result<BTreeSet<String>> {
+    validate_plan_for_serial(plan)?;
+    selected_scenarios(plan, &config.selected_scenarios)
+}
+
+fn execute<T>(
+    plan: ValidationPlan,
+    config: &SerialRunConfig,
+    session: &mut T,
+    selected: &BTreeSet<String>,
+) -> Result<ValidationRun>
+where
+    T: SerialIo,
+{
     fs::create_dir_all(&config.out)
         .with_context(|| format!("failed to create {}", config.out.display()))?;
-
-    let selected = selected_scenarios(&plan, &config.selected_scenarios)?;
+    let executor = plan.executor;
     let _ = session.clear();
 
     progressln(
         config,
         &format!(
-            "ROCKPro64 serial validation: {} selected scenario(s), max planned wait {}s",
+            "{} serial validation: {} selected scenario(s), max planned wait {}s",
+            plan.board,
             selected.len(),
-            selected_timeout_secs(&plan, &selected, config)
+            selected_timeout_secs(&plan, selected, config)
         ),
     );
 
@@ -70,7 +87,7 @@ where
             outcomes.push(ValidationOutcome {
                 scenario: scenario.name.clone(),
                 status: ValidationOutcomeStatus::NotRun,
-                executor: Some(ValidationExecutorKind::RockPro64Serial),
+                executor: Some(executor),
                 evidence: Vec::new(),
                 logs: Vec::new(),
                 failure: Some("scenario not selected for this hardware run".into()),
@@ -79,12 +96,12 @@ where
         }
 
         if interrupted {
-            outcomes.push(interrupted_outcome(scenario));
+            outcomes.push(interrupted_outcome(scenario, executor));
             continue;
         }
 
         if let Some(failed_scenario) = &stopped_after {
-            outcomes.push(stopped_after_failure_outcome(scenario, failed_scenario));
+            outcomes.push(stopped_after_failure_outcome(scenario, failed_scenario, executor));
             continue;
         }
 
@@ -92,7 +109,7 @@ where
             outcomes.push(ValidationOutcome {
                 scenario: scenario.name.clone(),
                 status: ValidationOutcomeStatus::Skipped,
-                executor: Some(ValidationExecutorKind::RockPro64Serial),
+                executor: Some(executor),
                 evidence: Vec::new(),
                 logs: Vec::new(),
                 failure: Some("destructive SPI scenario requires --allow-destructive-spi".into()),
@@ -101,7 +118,7 @@ where
         }
 
         progressln(config, &format!("scenario {}: starting", scenario.name));
-        let outcome = run_scenario(session, scenario, config)?;
+        let outcome = run_scenario(session, scenario, config, executor)?;
         match outcome.status {
             ValidationOutcomeStatus::Failed => stopped_after = Some(outcome.scenario.clone()),
             ValidationOutcomeStatus::Interrupted => interrupted = true,
@@ -116,24 +133,25 @@ where
 }
 
 #[must_use]
-pub fn rockpro64_serial_selected_outcomes_passed(run: &ValidationRun) -> bool {
+pub fn serial_selected_outcomes_passed(run: &ValidationRun) -> bool {
     run.outcomes.iter().all(|outcome| {
         outcome.status == ValidationOutcomeStatus::Passed
             || outcome.status == ValidationOutcomeStatus::NotRun
     })
 }
 
-fn validate_plan_for_rockpro64_serial(plan: &ValidationPlan) -> Result<()> {
-    if plan.board != Board::RockPro64 {
-        bail!("rockpro64-serial validates ROCKPro64 plans only");
+fn validate_plan_for_serial(plan: &ValidationPlan) -> Result<()> {
+    match plan.executor {
+        ValidationExecutorKind::UBootSerial => Ok(()),
+        ValidationExecutorKind::RockPro64Serial if plan.board == Board::RockPro64 => Ok(()),
+        ValidationExecutorKind::RockPro64Serial => bail!(
+            "executor rockpro64-serial is only valid for the rockpro64 board, plan is for {}; use u-boot-serial",
+            plan.board
+        ),
+        other => bail!(
+            "serial validation requires executor u-boot-serial (or rockpro64-serial for rockpro64), plan has {other}"
+        ),
     }
-    if plan.executor != ValidationExecutorKind::RockPro64Serial {
-        bail!(
-            "rockpro64-serial requires executor rockpro64-serial, plan has {}",
-            plan.executor
-        );
-    }
-    Ok(())
 }
 
 fn selected_scenarios(plan: &ValidationPlan, requested: &[String]) -> Result<BTreeSet<String>> {
@@ -158,11 +176,14 @@ fn selected_scenarios(plan: &ValidationPlan, requested: &[String]) -> Result<BTr
     Ok(requested)
 }
 
-fn interrupted_outcome(scenario: &ValidationScenario) -> ValidationOutcome {
+fn interrupted_outcome(
+    scenario: &ValidationScenario,
+    executor: ValidationExecutorKind,
+) -> ValidationOutcome {
     ValidationOutcome {
         scenario: scenario.name.clone(),
         status: ValidationOutcomeStatus::Interrupted,
-        executor: Some(ValidationExecutorKind::RockPro64Serial),
+        executor: Some(executor),
         evidence: Vec::new(),
         logs: Vec::new(),
         failure: Some("validation interrupted by operator".into()),
@@ -172,11 +193,12 @@ fn interrupted_outcome(scenario: &ValidationScenario) -> ValidationOutcome {
 fn stopped_after_failure_outcome(
     scenario: &ValidationScenario,
     failed_scenario: &str,
+    executor: ValidationExecutorKind,
 ) -> ValidationOutcome {
     ValidationOutcome {
         scenario: scenario.name.clone(),
         status: ValidationOutcomeStatus::NotRun,
-        executor: Some(ValidationExecutorKind::RockPro64Serial),
+        executor: Some(executor),
         evidence: Vec::new(),
         logs: Vec::new(),
         failure: Some(format!(

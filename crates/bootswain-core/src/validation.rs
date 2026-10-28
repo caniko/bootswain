@@ -40,6 +40,10 @@ pub enum ValidationExecutorKind {
     #[default]
     Deferred,
     QemuArm64,
+    /// Generic U-Boot shell driven over a serial port (any board).
+    #[serde(rename = "u-boot-serial")]
+    UBootSerial,
+    /// Legacy name of the serial executor, accepted only for ROCKPro64 plans.
     #[serde(rename = "rockpro64-serial")]
     RockPro64Serial,
 }
@@ -49,6 +53,7 @@ impl fmt::Display for ValidationExecutorKind {
         match self {
             Self::Deferred => f.write_str("deferred"),
             Self::QemuArm64 => f.write_str("qemu-arm64"),
+            Self::UBootSerial => f.write_str("u-boot-serial"),
             Self::RockPro64Serial => f.write_str("rockpro64-serial"),
         }
     }

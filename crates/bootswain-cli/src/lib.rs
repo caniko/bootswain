@@ -6,7 +6,7 @@ use bootswain_core::{
 use std::fmt::Write as _;
 
 pub mod qemu;
-pub mod rockpro64_serial;
+pub mod uboot_serial;
 
 pub fn render_image_info_human(info: &ImageInfo) -> String {
     let mut output = String::new();

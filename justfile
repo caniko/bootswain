@@ -22,7 +22,7 @@ flash target device dry_run="" verify="" verify_only="" json="" yes="" allow_non
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-scenario scenario port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -36,7 +36,7 @@ rockpro64-validate-scenario scenario port="/dev/ttyUSB0" baud="115200" out="boot
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-spi port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -55,7 +55,7 @@ rockpro64-validate-spi port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro6
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-installed-firmware port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -69,7 +69,7 @@ rockpro64-validate-installed-firmware port="/dev/ttyUSB0" baud="115200" out="boo
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-boot-media-scenario scenario port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -82,7 +82,7 @@ rockpro64-validate-boot-media-scenario scenario port="/dev/ttyUSB0" baud="115200
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-boot-media port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -100,7 +100,7 @@ rockpro64-validate-boot-media port="/dev/ttyUSB0" baud="115200" out="bootswain-r
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
 rockpro64-validate-stable port="/dev/ttyUSB0" baud="115200" out="bootswain-rockpro64-stable-run":
-    nix develop --command cargo run -p bootswain-cli -- validate rockpro64-serial \
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
         --plan validation/rockpro64/lab-plan.json \
         --port "{{ port }}" \
         --baud "{{ baud }}" \
@@ -118,4 +118,32 @@ rockpro64-validate-stable port="/dev/ttyUSB0" baud="115200" out="bootswain-rockp
         --scenario emmc-uefi-boot \
         --scenario emmc-extlinux-boot \
         --scenario usb-uefi-boot \
+        --scenario usb-extlinux-boot
+
+# Run one Raspberry Pi 3 B+ serial validation scenario.
+[arg("scenario", help="Scenario name from validation/raspberrypi3bplus/lab-plan.json")]
+[arg("port", long="port", help="Serial device path")]
+[arg("baud", long="baud", help="Serial baud rate")]
+[arg("out", long="out", help="Validation output directory")]
+rpi3bplus-validate-scenario scenario port="/dev/ttyUSB0" baud="115200" out="bootswain-rpi3bplus-run":
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
+        --plan validation/raspberrypi3bplus/lab-plan.json \
+        --port "{{ port }}" \
+        --baud "{{ baud }}" \
+        --out "{{ out }}" \
+        --scenario "{{ scenario }}"
+
+# Run all Raspberry Pi 3 B+ serial validation scenarios.
+[arg("port", long="port", help="Serial device path")]
+[arg("baud", long="baud", help="Serial baud rate")]
+[arg("out", long="out", help="Validation output directory")]
+rpi3bplus-validate port="/dev/ttyUSB0" baud="115200" out="bootswain-rpi3bplus-run":
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
+        --plan validation/raspberrypi3bplus/lab-plan.json \
+        --port "{{ port }}" \
+        --baud "{{ baud }}" \
+        --out "{{ out }}" \
+        --scenario serial-u-boot-prompt \
+        --scenario family-dtb-check \
+        --scenario sd-extlinux-boot \
         --scenario usb-extlinux-boot

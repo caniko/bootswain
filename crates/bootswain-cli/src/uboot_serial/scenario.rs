@@ -1,4 +1,4 @@
-use super::RockPro64SerialRunConfig;
+use super::SerialRunConfig;
 use super::read::{
     ReadOptions, ReadStatus, ResetPolicy, format_expected_patterns, read_until_patterns,
 };
@@ -17,7 +17,8 @@ use std::time::Duration;
 pub(super) fn run_scenario<T>(
     session: &mut T,
     scenario: &ValidationScenario,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
+    executor: ValidationExecutorKind,
 ) -> Result<ValidationOutcome>
 where
     T: SerialIo,
@@ -34,7 +35,7 @@ where
         return Ok(ValidationOutcome {
             scenario: scenario.name.clone(),
             status: ValidationOutcomeStatus::Skipped,
-            executor: Some(ValidationExecutorKind::RockPro64Serial),
+            executor: Some(executor),
             evidence: Vec::new(),
             logs: vec![relative_log],
             failure: Some("scenario has no validation steps".into()),
@@ -64,7 +65,7 @@ where
     Ok(ValidationOutcome {
         scenario: scenario.name.clone(),
         status,
-        executor: Some(ValidationExecutorKind::RockPro64Serial),
+        executor: Some(executor),
         evidence,
         logs: vec![relative_log],
         failure,
@@ -74,7 +75,7 @@ where
 fn run_steps<T>(
     session: &mut T,
     scenario: &ValidationScenario,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
     log: &mut String,
     evidence: &mut Vec<String>,
 ) -> Result<StepResult>
@@ -100,7 +101,7 @@ fn run_step<T>(
     session: &mut T,
     scenario: &ValidationScenario,
     step: &ValidationStep,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
     log: &mut String,
 ) -> Result<StepResult>
 where
@@ -187,7 +188,11 @@ where
             .with_context(|| format!("failed to flush command for step {}", step.name))?;
     }
 
-    if step.command.is_none() && step.expect.iter().any(|pattern| pattern == "=> ") {
+    // A prompt-only step races U-Boot's bootdelay just like a command step, so it also
+    // requests the prompt; the boot banner it waits through is expected, not a reset.
+    let waits_for_prompt =
+        step.command.is_none() && step.expect.iter().any(|pattern| pattern == "=> ");
+    if waits_for_prompt {
         let _ = write!(
             log,
             "\n# bootswain waiting for U-Boot prompt for {}\n",
@@ -203,8 +208,12 @@ where
             progress_interval: config.progress_interval,
             progress_label: Some(step.name.clone()),
             fail_on_prompt: step.command.is_some(),
-            repeat_prompt_request: false,
-            reset_policy: ResetPolicy::Fail,
+            repeat_prompt_request: waits_for_prompt,
+            reset_policy: if waits_for_prompt {
+                ResetPolicy::IgnoreBootBanners
+            } else {
+                ResetPolicy::Fail
+            },
         },
         &config.cancellation,
         log,
@@ -249,7 +258,7 @@ where
         .with_context(|| format!("failed to clear serial input before step {}", step.name))
 }
 
-fn effective_step_timeout(step: &ValidationStep, config: &RockPro64SerialRunConfig) -> Duration {
+fn effective_step_timeout(step: &ValidationStep, config: &SerialRunConfig) -> Duration {
     let plan_timeout = Duration::from_secs(step.timeout_secs);
     match config.max_step_timeout {
         Some(max_timeout) if max_timeout < plan_timeout => max_timeout,
@@ -260,7 +269,7 @@ fn effective_step_timeout(step: &ValidationStep, config: &RockPro64SerialRunConf
 pub(super) fn selected_timeout_secs(
     plan: &ValidationPlan,
     selected: &BTreeSet<String>,
-    config: &RockPro64SerialRunConfig,
+    config: &SerialRunConfig,
 ) -> u64 {
     plan.scenarios
         .iter()
@@ -270,7 +279,7 @@ pub(super) fn selected_timeout_secs(
         .sum()
 }
 
-pub(super) fn progressln(config: &RockPro64SerialRunConfig, message: &str) {
+pub(super) fn progressln(config: &SerialRunConfig, message: &str) {
     if config.progress_interval > Duration::ZERO {
         eprintln!("bootswain: {message}");
     }

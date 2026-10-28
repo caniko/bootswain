@@ -1,7 +1,5 @@
-use super::{
-    rockpro64_serial_selected_outcomes_passed, run_rockpro64_serial_validation_with_session,
-};
-use bootswain_core::ValidationOutcomeStatus;
+use super::{run_serial_validation_with_session, serial_selected_outcomes_passed};
+use bootswain_core::{Board, ValidationExecutorKind, ValidationOutcomeStatus};
 use std::sync::atomic::Ordering;
 use tempfile::tempdir;
 
@@ -19,7 +17,7 @@ fn prompt_scenario_passes_and_writes_log() {
     );
     let mut serial = FakeSerial::with_chunks(&["U-Boot 2026.04\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -28,7 +26,7 @@ fn prompt_scenario_passes_and_writes_log() {
         .find(|outcome| outcome.scenario == "recovery-console")
         .expect("recovery outcome");
     assert_eq!(outcome.status, ValidationOutcomeStatus::Passed);
-    assert!(rockpro64_serial_selected_outcomes_passed(&run));
+    assert!(serial_selected_outcomes_passed(&run));
     assert!(config.out.join("recovery-console/serial.log").exists());
 }
 
@@ -38,7 +36,7 @@ fn command_step_waits_for_prompt_before_write() {
     let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
     let mut serial = FakeSerial::with_chunks(&["=> ", "Scanning for bootflows\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -61,7 +59,7 @@ fn command_step_catches_autoboot_after_reset_before_write() {
         "Scanning for bootflows\n=> ",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -83,7 +81,7 @@ fn command_step_selects_shell_from_boot_menu_before_write() {
         "Scanning for bootflows\n=> ",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -101,7 +99,7 @@ fn non_destructive_command_step_passes_when_expected_output_appears_before_promp
     let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
     let mut serial = FakeSerial::with_chunks(&["Scanning for bootflows\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -126,7 +124,7 @@ fn command_step_clears_stale_input_after_prompt_before_write() {
         &[0, 1],
     );
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -150,7 +148,7 @@ fn timeout_marks_selected_scenario_failed() {
     let mut plan = sample_plan();
     plan.scenarios[0].steps[0].timeout_secs = 0;
 
-    let run = run_rockpro64_serial_validation_with_session(plan, &config, &mut serial)
+    let run = run_serial_validation_with_session(plan, &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -166,7 +164,7 @@ fn timeout_marks_selected_scenario_failed() {
             .expect("failure")
             .contains("timed out")
     );
-    assert!(!rockpro64_serial_selected_outcomes_passed(&run));
+    assert!(!serial_selected_outcomes_passed(&run));
 }
 
 #[test]
@@ -179,7 +177,7 @@ fn reset_marks_selected_scenario_failed() {
     );
     let mut serial = FakeSerial::with_chunks(&["Resetting CPU ..."]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -206,7 +204,7 @@ fn boot_banner_after_command_marks_selected_scenario_failed() {
         "Flashing SPI payload from mmc 1:1\nWriting SPI payload\n\nU-Boot TPL 2026.04\n",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -230,7 +228,7 @@ fn destructive_spi_scenarios_are_skipped_without_flag() {
     let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], false);
     let mut serial = FakeSerial::with_chunks(&["=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -240,7 +238,7 @@ fn destructive_spi_scenarios_are_skipped_without_flag() {
         .expect("spi outcome");
     assert_eq!(outcome.status, ValidationOutcomeStatus::Skipped);
     assert!(serial.writes.is_empty());
-    assert!(!rockpro64_serial_selected_outcomes_passed(&run));
+    assert!(!serial_selected_outcomes_passed(&run));
 }
 
 #[test]
@@ -252,7 +250,7 @@ fn destructive_spi_scenarios_run_with_flag() {
         "Flashing SPI payload from mmc 0:1\nSPI flash complete\n",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -273,7 +271,7 @@ fn terminal_failure_marker_fails_without_waiting_for_full_timeout() {
         "Flashing SPI payload from mmc 0:1\nSPI probe failed\n=> ",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -300,7 +298,7 @@ fn installed_firmware_spi_refusal_fails_without_waiting_for_full_timeout() {
         "SPI flashing is refused from installed SPI firmware\n=> ",
     ]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -326,7 +324,7 @@ fn expected_no_bootable_media_marker_still_passes() {
     plan.scenarios[1].steps[0].expect = vec!["No bootable media on SD".into()];
     let mut serial = FakeSerial::with_chunks(&["=> ", "No bootable media on SD\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(plan, &config, &mut serial)
+    let run = run_serial_validation_with_session(plan, &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -343,7 +341,7 @@ fn prompt_return_after_command_without_expected_patterns_fails_immediately() {
     let config = sample_config(tmp.path().join("out"), vec!["spi-install".into()], true);
     let mut serial = FakeSerial::with_chunks(&["=> ", "Flashing SPI payload from mmc 0:1\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let outcome = run
@@ -371,7 +369,7 @@ fn selected_run_stops_after_first_failed_scenario() {
     );
     let mut serial = FakeSerial::with_chunks(&["=> ", "SPI probe failed\n=> "]);
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let bootflow = run
@@ -403,7 +401,7 @@ fn interruption_writes_partial_run_and_marks_selected_scenarios_interrupted() {
     config.cancellation.store(true, Ordering::SeqCst);
     let mut serial = FakeSerial::default();
 
-    let run = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect("serial validation");
 
     let recovery = run
@@ -428,7 +426,7 @@ fn missing_scenario_filter_is_rejected() {
     let config = sample_config(tmp.path().join("out"), vec!["missing".into()], false);
     let mut serial = FakeSerial::default();
 
-    let error = run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut serial)
+    let error = run_serial_validation_with_session(sample_plan(), &config, &mut serial)
         .expect_err("missing scenario should fail");
 
     assert!(error.to_string().contains("does not contain scenario"));
@@ -464,7 +462,7 @@ fn serial_io_error_is_recorded_and_run_file_still_written() {
     );
 
     let run =
-        run_rockpro64_serial_validation_with_session(sample_plan(), &config, &mut BrokenSerial)
+        run_serial_validation_with_session(sample_plan(), &config, &mut BrokenSerial)
             .expect("run is returned with the failure recorded");
 
     let outcome = run
@@ -481,5 +479,80 @@ fn serial_io_error_is_recorded_and_run_file_still_written() {
     );
     assert!(config.out.join("validation-run.json").exists());
     assert!(config.out.join("recovery-console/serial.log").exists());
-    assert!(!rockpro64_serial_selected_outcomes_passed(&run));
+    assert!(!serial_selected_outcomes_passed(&run));
+}
+
+fn pi3_plan(executor: ValidationExecutorKind, board: Board) -> bootswain_core::ValidationPlan {
+    let mut plan = sample_plan();
+    plan.board = board;
+    plan.executor = executor;
+    plan
+}
+
+#[test]
+fn u_boot_serial_plan_runs_for_raspberry_pi_3_b_plus() {
+    let tmp = tempdir().expect("tempdir");
+    let config = sample_config(
+        tmp.path().join("out"),
+        vec!["recovery-console".into()],
+        false,
+    );
+    let mut serial = FakeSerial::with_chunks(&["U-Boot 2026.04\n=> "]);
+    let plan = pi3_plan(ValidationExecutorKind::UBootSerial, Board::RaspberryPi3BPlus);
+
+    let run = run_serial_validation_with_session(plan, &config, &mut serial).expect("run");
+
+    assert!(serial_selected_outcomes_passed(&run));
+    assert!(
+        run.outcomes
+            .iter()
+            .all(|outcome| outcome.executor == Some(ValidationExecutorKind::UBootSerial))
+    );
+}
+
+#[test]
+fn rockpro64_executor_is_rejected_for_other_boards() {
+    let tmp = tempdir().expect("tempdir");
+    let config = sample_config(tmp.path().join("out"), Vec::new(), false);
+    let mut serial = FakeSerial::with_chunks(&[]);
+    let plan = pi3_plan(
+        ValidationExecutorKind::RockPro64Serial,
+        Board::RaspberryPi3BPlus,
+    );
+
+    let error = run_serial_validation_with_session(plan, &config, &mut serial)
+        .expect_err("rockpro64 executor on a pi plan");
+
+    assert!(error.to_string().contains("only valid for the rockpro64 board"));
+}
+
+#[test]
+fn prompt_only_step_requests_the_prompt_through_boot_banners() {
+    let tmp = tempdir().expect("tempdir");
+    let mut config = sample_config(
+        tmp.path().join("out"),
+        vec!["recovery-console".into()],
+        false,
+    );
+    config.idle_sleep = std::time::Duration::from_millis(10);
+    let mut plan = sample_plan();
+    plan.scenarios[0].steps[0].timeout_secs = 3;
+    // A normal boot banner (\nU-Boot) must not count as a reset while waiting for a prompt,
+    // and silence must trigger the autoboot interrupt.
+    let mut serial = FakeSerial::with_chunks(&["\nU-Boot 2026.04\nHit any key to stop autoboot"]);
+
+    let run =
+        run_serial_validation_with_session(plan, &config, &mut serial).expect("serial validation");
+
+    let outcome = &run.outcomes[0];
+    assert_eq!(outcome.status, ValidationOutcomeStatus::Failed);
+    assert!(
+        outcome
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("timed out")),
+        "{:?}",
+        outcome.failure
+    );
+    assert_eq!(serial.writes, vec!["\n"]);
 }

@@ -15,6 +15,7 @@ fn public_enum_wire_names_are_stable() {
         (FirmwareArtifactKind::SpiFirmware, "spi-firmware"),
         (FirmwareArtifactKind::SpiInstaller, "spi-installer"),
         (FirmwareArtifactKind::SharedDiskImage, "shared-disk-image"),
+        (FirmwareArtifactKind::SdCardImage, "sd-card-image"),
         (
             FirmwareArtifactKind::BootPartitionImage,
             "boot-partition-image",
@@ -108,6 +109,12 @@ fn public_enum_wire_names_are_stable() {
             .expect("serialize rockpro64 executor"),
         "\"rockpro64-serial\""
     );
+    assert_eq!(
+        serde_json::to_string(&ValidationExecutorKind::UBootSerial)
+            .expect("serialize u-boot-serial executor"),
+        "\"u-boot-serial\""
+    );
+    assert_eq!(ValidationExecutorKind::UBootSerial.to_string(), "u-boot-serial");
     assert_eq!(
         "usb-storage"
             .parse::<QemuDiskInterface>()
