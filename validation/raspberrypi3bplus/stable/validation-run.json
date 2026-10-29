@@ -1,0 +1,147 @@
+{
+  "plan": {
+    "schema_version": 1,
+    "board": "raspberry-pi-3-b-plus",
+    "release": "2026.04-raspberrypi3bplus-lab.0",
+    "executor": "u-boot-serial",
+    "qemu": null,
+    "uboot_prompt": "U-Boot> ",
+    "scenarios": [
+      {
+        "name": "serial-u-boot-prompt",
+        "kind": "prompt",
+        "target": "sd",
+        "protocol": "u-boot-shell",
+        "artifact": "sd-card-image",
+        "steps": [
+          {
+            "name": "wait for u-boot prompt",
+            "command": null,
+            "expect": [
+              "U-Boot",
+              "U-Boot> "
+            ],
+            "timeout_secs": 120
+          }
+        ]
+      },
+      {
+        "name": "family-dtb-check",
+        "kind": "prompt",
+        "target": "sd",
+        "protocol": "u-boot-shell",
+        "artifact": "sd-card-image",
+        "steps": [
+          {
+            "name": "print board model from the firmware DTB",
+            "command": "fdt addr ${fdt_addr}; fdt print / model; fdt print / compatible",
+            "expect": [
+              "Raspberry Pi 3 Model B Plus",
+              "raspberrypi,3-model-b-plus"
+            ],
+            "timeout_secs": 15
+          }
+        ]
+      },
+      {
+        "name": "sd-extlinux-boot",
+        "kind": "extlinux-boot",
+        "target": "sd",
+        "protocol": "extlinux",
+        "artifact": "sd-card-image",
+        "steps": [
+          {
+            "name": "boot extlinux from sd",
+            "command": "setenv boot_targets mmc; bootflow scan",
+            "expect": [
+              "Starting kernel"
+            ],
+            "timeout_secs": 60
+          },
+          {
+            "name": "wait for login prompt",
+            "command": null,
+            "expect": [
+              "login:"
+            ],
+            "timeout_secs": 240
+          }
+        ]
+      },
+      {
+        "name": "usb-extlinux-boot",
+        "kind": "extlinux-boot",
+        "target": "usb",
+        "protocol": "extlinux",
+        "artifact": "sd-card-image",
+        "steps": [
+          {
+            "name": "boot extlinux from usb",
+            "command": "setenv boot_targets usb; usb start; bootflow scan",
+            "expect": [
+              "Starting kernel"
+            ],
+            "timeout_secs": 60
+          },
+          {
+            "name": "wait for login prompt",
+            "command": null,
+            "expect": [
+              "login:"
+            ],
+            "timeout_secs": 240
+          }
+        ]
+      }
+    ]
+  },
+  "outcomes": [
+    {
+      "scenario": "serial-u-boot-prompt",
+      "status": "passed",
+      "executor": "u-boot-serial",
+      "evidence": [
+        "wait for u-boot prompt matched serial pattern: \"U-Boot\"",
+        "wait for u-boot prompt matched serial pattern: \"U-Boot> \""
+      ],
+      "logs": [
+        "serial-u-boot-prompt/serial.log"
+      ],
+      "failure": null
+    },
+    {
+      "scenario": "family-dtb-check",
+      "status": "passed",
+      "executor": "u-boot-serial",
+      "evidence": [
+        "print board model from the firmware DTB matched serial pattern: \"Raspberry Pi 3 Model B Plus\"",
+        "print board model from the firmware DTB matched serial pattern: \"raspberrypi,3-model-b-plus\""
+      ],
+      "logs": [
+        "family-dtb-check/serial.log"
+      ],
+      "failure": null
+    },
+    {
+      "scenario": "sd-extlinux-boot",
+      "status": "passed",
+      "executor": "u-boot-serial",
+      "evidence": [
+        "boot extlinux from sd matched serial pattern: \"Starting kernel\"",
+        "wait for login prompt matched serial pattern: \"login:\""
+      ],
+      "logs": [
+        "sd-extlinux-boot/serial.log"
+      ],
+      "failure": null
+    },
+    {
+      "scenario": "usb-extlinux-boot",
+      "status": "not-run",
+      "executor": "u-boot-serial",
+      "evidence": [],
+      "logs": [],
+      "failure": "scenario not selected for this hardware run"
+    }
+  ]
+}
