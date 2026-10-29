@@ -3,6 +3,7 @@
   self,
   nixpkgs,
   plinth,
+  treefmt-nix,
   harbor-rs,
   rust-overlay,
   system,
@@ -87,12 +88,15 @@
     docsPackage = sites.packages.site or null;
   };
 
+  treefmtWrapper =
+    (treefmt-nix.lib.evalModule pkgs (import ./treefmt.nix {rustfmtPackage = toolchain.rustToolchain;})).config.build.wrapper;
+
   shells = import ./modules/shells.nix {
-    inherit harbor-rs pkgs cross toolchain;
+    inherit harbor-rs pkgs cross toolchain treefmtWrapper;
     plinthProject = plinth.packages.${system}.plinth-project;
   };
 
-  nixosModuleCheck = let
+  nixosModuleChecks = let
     fakeFirmwarePackage = pkgs.runCommand "bootswain-rockpro64-fake-firmware" {} ''
       mkdir -p "$out"
       printf '%s\n' "fake updater script" > "$out/nixos-updater.boot.scr.uimg"
@@ -105,7 +109,7 @@
       printf '%s\n' "fake start cd" > "$out/start_cd.elf"
       printf '%s\n' "fake fixup" > "$out/fixup.dat"
       printf '%s\n' "fake fixup cd" > "$out/fixup_cd.dat"
-      printf '%s\n' "fake dtb" > "$out/bcm2710-rpi-3-b-plus.dtb"
+      for dtb in 3-b 3-b-plus zero-2-w; do printf '%s\n' "fake dtb" > "$out/bcm2710-rpi-$dtb.dtb"; done
       printf '%s\n' "fake uboot" > "$out/u-boot-rpi3.bin"
       printf '%s\n' "kernel=u-boot-rpi3.bin" > "$out/config.txt"
     '';
@@ -217,6 +221,8 @@
         else "false"
       }
       bootableConsole=${builtins.concatStringsSep " " bootableConfig.config.boot.kernelParams}
+    '';
+    raspberryPi3BPlusEvalSummary = pkgs.writeText "bootswain-raspberrypi3bplus-aarch64-nixos-eval.txt" ''
       raspberryPi3BPlusBootFiles=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles.name}
       raspberryPi3BPlusGrub=${
         if raspberryPi3BPlusConfig.config.boot.loader.grub.enable
@@ -240,11 +246,11 @@
         else "false"
       }
       raspberryPi3BPlusBootableConsole=${builtins.concatStringsSep " " raspberryPi3BPlusBootableConfig.config.boot.kernelParams}
+      raspberryPi3BPlusActivation=${raspberryPi3BPlusConfig.config.system.activationScripts.bootswainRaspberryPi3BPlusBootFiles.text}
     '';
-  in
-    pkgs.runCommand "bootswain-rockpro64-nixos-module-check" {} ''
+  in {
+    rockpro64 = pkgs.runCommand "bootswain-rockpro64-nixos-module-check" {} ''
       boot_files=${currentSystemConfig.config.system.build.bootswainRockpro64BootFiles}
-      rpi_boot_files=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles}
       test -e "${aarch64Config.config.hardware.deviceTree.package}/rockchip/rk3399-rockpro64.dtb"
 
       test -s "$boot_files/boot.scr.uimg"
@@ -253,12 +259,6 @@
       test -s "$boot_files/boot/u-boot-rockchip-spi.bin"
       cmp "$boot_files/boot.scr.uimg" "$boot_files/boot/boot.scr.uimg"
       cmp "$boot_files/u-boot-rockchip-spi.bin" "$boot_files/boot/u-boot-rockchip-spi.bin"
-      test -s "$rpi_boot_files/bootcode.bin"
-      test -s "$rpi_boot_files/config.txt"
-      test -s "$rpi_boot_files/bcm2710-rpi-3-b-plus.dtb"
-      test -s "$rpi_boot_files/u-boot-rpi3.bin"
-      test -s "$rpi_boot_files/start.elf"
-      test -s "$rpi_boot_files/fixup.dat"
 
       grep -q '^bootFiles=bootswain-rockpro64-boot-files$' ${aarch64EvalSummary}
       grep -q '^grub=false$' ${aarch64EvalSummary}
@@ -270,19 +270,39 @@
       grep -q '^bootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
       grep -q '^bootableEnabled=true$' ${aarch64EvalSummary}
       grep -q '^bootableConsole=.*console=ttyS2,115200n8' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusBootFiles=bootswain-raspberrypi3bplus-boot-files$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusGrub=false$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusExtlinux=true$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusSystemdBoot=false$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusBootableHostPlatform=aarch64-linux$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusBootableEnabled=true$' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusBootableConsole=.*console=ttyAMA0,115200n8' ${aarch64EvalSummary}
-      grep -q '^raspberryPi3BPlusBootableConsole=.*console=tty0' ${aarch64EvalSummary}
 
       mkdir -p "$out"
       cp ${aarch64EvalSummary} "$out/aarch64-eval.txt"
       printf '%s\n' "bootswain ROCKPro64 NixOS module check passed" > "$out/result"
     '';
+    raspberrypi3bplus = pkgs.runCommand "bootswain-raspberrypi3bplus-nixos-module-check" {} ''
+      rpi_boot_files=${raspberryPi3BPlusConfig.config.system.build.bootswainRaspberryPi3BPlusBootFiles}
+      test -s "$rpi_boot_files/bootcode.bin"
+      test -s "$rpi_boot_files/config.txt"
+      test -s "$rpi_boot_files/u-boot-rpi3.bin"
+      test -s "$rpi_boot_files/start.elf"
+      test -s "$rpi_boot_files/fixup.dat"
+      for dtb in 3-b 3-b-plus zero-2-w; do
+        test -s "$rpi_boot_files/bcm2710-rpi-$dtb.dtb"
+      done
+
+      grep -q '^raspberryPi3BPlusBootFiles=bootswain-raspberrypi3bplus-boot-files$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusGrub=false$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusExtlinux=true$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusSystemdBoot=false$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusBootableHostPlatform=aarch64-linux$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusBootableEnabled=true$' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusBootableConsole=.*console=ttyS1,115200n8' ${raspberryPi3BPlusEvalSummary}
+      grep -q '^raspberryPi3BPlusBootableConsole=.*console=tty0' ${raspberryPi3BPlusEvalSummary}
+      ! grep -q 'console=ttyAMA0' ${raspberryPi3BPlusEvalSummary}
+      grep -q 'bcm2710-\*.dtb' ${raspberryPi3BPlusEvalSummary}
+      grep -q 'bin/mountpoint -q' ${raspberryPi3BPlusEvalSummary}
+
+      mkdir -p "$out"
+      cp ${raspberryPi3BPlusEvalSummary} "$out/aarch64-eval.txt"
+      printf '%s\n' "bootswain Raspberry Pi 3 B+ NixOS module check passed" > "$out/result"
+    '';
+  };
 in {
   packages =
     workspace.packages
@@ -306,7 +326,9 @@ in {
     // artifacts.checks
     // flash.checks
     // {
-      rockpro64-nixos-module = nixosModuleCheck;
+      rockpro64-nixos-module = nixosModuleChecks.rockpro64;
+      raspberrypi3bplus-nixos-module = nixosModuleChecks.raspberrypi3bplus;
     };
+  formatter = treefmtWrapper;
   inherit (shells) devShells;
 }

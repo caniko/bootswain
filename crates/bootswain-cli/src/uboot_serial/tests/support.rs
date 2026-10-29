@@ -1,4 +1,4 @@
-use super::super::RockPro64SerialRunConfig;
+use super::super::SerialRunConfig;
 use bootswain_core::{
     Board, BootProtocol, BootTarget, ValidationExecutorKind, ValidationPlan, ValidationScenario,
     ValidationScenarioKind, ValidationStep,
@@ -75,8 +75,8 @@ pub(super) fn sample_config(
     out: PathBuf,
     selected_scenarios: Vec<String>,
     allow_destructive_spi: bool,
-) -> RockPro64SerialRunConfig {
-    RockPro64SerialRunConfig {
+) -> SerialRunConfig {
+    SerialRunConfig {
         port: "/dev/ttyUSB0".into(),
         baud: 115_200,
         out,
@@ -96,6 +96,7 @@ pub(super) fn sample_plan() -> ValidationPlan {
         release: "test".into(),
         executor: ValidationExecutorKind::RockPro64Serial,
         qemu: None,
+        uboot_prompt: None,
         scenarios: vec![
             ValidationScenario {
                 name: "recovery-console".into(),

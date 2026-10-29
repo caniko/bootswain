@@ -61,7 +61,7 @@
       available targets:
         pi5-boot-partition                    channel: release-candidate artifact: boot-partition-image
         rock5a-uefi                           channel: release-candidate artifact: uefi-firmware
-        raspberrypi3bplus-boot-partition    channel: release-candidate artifact: boot-partition-image
+        raspberrypi3bplus-sd-card             channel: release-candidate artifact: sd-card-image
         rockpro64-spi-installer               channel: release-candidate artifact: spi-installer
         rockpro64-spi-installer-experimental  channel: experimental artifact: spi-installer
         rockpro64-shared-disk-image           channel: release-candidate artifact: shared-disk-image
@@ -145,8 +145,8 @@
         rockpro64-experimental)
           target="rockpro64-spi-installer-experimental"
           ;;
-        raspberrypi3bplus|rpi3bplus)
-          target="raspberrypi3bplus-boot-partition"
+        raspberrypi3bplus|rpi3bplus|raspberrypi3bplus-boot-partition|rpi-3-b-plus|raspberry-pi-3-b-plus)
+          target="raspberrypi3bplus-sd-card"
           ;;
       esac
 
@@ -161,9 +161,9 @@
           artifact="uefi-firmware"
           channel="release-candidate"
           ;;
-        raspberrypi3bplus-boot-partition)
+        raspberrypi3bplus-sd-card)
           bundle="${raspberryPi3BPlusReleaseBundle}"
-          artifact="boot-partition-image"
+          artifact="sd-card-image"
           channel="release-candidate"
           ;;
         rockpro64-spi-installer)
@@ -216,7 +216,7 @@
     mkdir -p "$out"
 
     ${flashApp}/bin/bootswain-flash --list-targets > "$out/targets.txt"
-    grep -q 'raspberrypi3bplus-boot-partition' "$out/targets.txt"
+    grep -q 'raspberrypi3bplus-sd-card' "$out/targets.txt"
     grep -q 'rockpro64-spi-installer' "$out/targets.txt"
     grep -q 'rockpro64-spi-installer-experimental' "$out/targets.txt"
     grep -q 'rockpro64-shared-disk-image' "$out/targets.txt"
@@ -245,7 +245,7 @@
     test "$status" -eq 2
     grep -q 'unknown target: nope' "$out/unknown-target.err"
     grep -q 'rockpro64-spi-installer' "$out/unknown-target.err"
-    grep -q 'raspberrypi3bplus-boot-partition' "$out/unknown-target.err"
+    grep -q 'raspberrypi3bplus-sd-card' "$out/unknown-target.err"
 
     set +e
     ${flashApp}/bin/bootswain-flash \
@@ -256,9 +256,9 @@
     status=$?
     set -e
     test "$status" -ne 0
-    grep -q 'bootswain flash alias: rpi3bplus -> raspberrypi3bplus-boot-partition' "$out/rpi3bplus-alias.err"
-    grep -q 'bootswain flash target: raspberrypi3bplus-boot-partition' "$out/rpi3bplus-alias.err"
-    grep -q 'bootswain flash artifact: boot-partition-image' "$out/rpi3bplus-alias.err"
+    grep -q 'bootswain flash alias: rpi3bplus -> raspberrypi3bplus-sd-card' "$out/rpi3bplus-alias.err"
+    grep -q 'bootswain flash target: raspberrypi3bplus-sd-card' "$out/rpi3bplus-alias.err"
+    grep -q 'bootswain flash artifact: sd-card-image' "$out/rpi3bplus-alias.err"
     grep -q 'target is not a block device: /dev/null' "$out/rpi3bplus-alias.err"
     if grep -q 'not marked flashable' "$out/rpi3bplus-alias.err"; then
       echo "raspberry pi 3 b+ target unexpectedly failed manifest gating" >&2

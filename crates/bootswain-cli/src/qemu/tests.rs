@@ -294,6 +294,7 @@ fn sample_plan() -> ValidationPlan {
         release: "qemu-smoke".into(),
         executor: ValidationExecutorKind::QemuArm64,
         qemu: None,
+        uboot_prompt: None,
         scenarios: vec![ValidationScenario {
             name: "prompt".into(),
             kind: ValidationScenarioKind::Prompt,

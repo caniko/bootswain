@@ -40,6 +40,10 @@ pub enum ValidationExecutorKind {
     #[default]
     Deferred,
     QemuArm64,
+    /// Generic U-Boot shell driven over a serial port (any board).
+    #[serde(rename = "u-boot-serial")]
+    UBootSerial,
+    /// Legacy name of the serial executor, accepted only for ROCKPro64 plans.
     #[serde(rename = "rockpro64-serial")]
     RockPro64Serial,
 }
@@ -49,6 +53,7 @@ impl fmt::Display for ValidationExecutorKind {
         match self {
             Self::Deferred => f.write_str("deferred"),
             Self::QemuArm64 => f.write_str("qemu-arm64"),
+            Self::UBootSerial => f.write_str("u-boot-serial"),
             Self::RockPro64Serial => f.write_str("rockpro64-serial"),
         }
     }
@@ -121,7 +126,17 @@ pub struct ValidationPlan {
     pub executor: ValidationExecutorKind,
     #[serde(default)]
     pub qemu: Option<QemuValidationConfig>,
+    /// Shell prompt the board prints (`CONFIG_SYS_PROMPT`); defaults to `=> `.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uboot_prompt: Option<String>,
     pub scenarios: Vec<ValidationScenario>,
+}
+
+impl ValidationPlan {
+    #[must_use]
+    pub fn uboot_prompt(&self) -> &str {
+        self.uboot_prompt.as_deref().unwrap_or("=> ")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,5 +187,16 @@ impl ValidationRun {
         self.outcomes
             .iter()
             .all(|outcome| outcome.status == ValidationOutcomeStatus::Passed)
+    }
+}
+
+impl ValidationScenario {
+    /// Scenarios that rewrite SPI flash; they only make sense on real hardware.
+    #[must_use]
+    pub fn is_destructive_spi(&self) -> bool {
+        matches!(
+            self.kind,
+            ValidationScenarioKind::SpiInstall | ValidationScenarioKind::SpiErase
+        )
     }
 }

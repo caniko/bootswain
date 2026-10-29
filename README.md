@@ -2,14 +2,15 @@
 
 <!-- simit:badges:start -->
 
-![CI](https://img.shields.io/badge/CI-managed-2088ff) [![Nix](https://img.shields.io/badge/Nix-drift-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
+[![CI](https://img.shields.io/badge/CI-drift-2088ff)](https://github.com/caniko/fleet/actions) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
 
 <!-- simit:badges:end -->
 
 `bootswain` is a Rust workspace for repeatable host-side board flashing,
 firmware inspection, serial probing, and validation workflows around U-Boot.
-The current focus is ROCKPro64 firmware work, with Raspberry Pi 3 B+ boot
-partition tooling also present as release-candidate support.
+The current focus is ROCKPro64 firmware work, with hardware-validated Raspberry Pi 3 B+
+SD card firmware (stable evidence under `validation/raspberrypi3bplus/stable/`) and
+best-effort Pi 3 family firmware.
 
 Pi 5 U-Boot UEFI and ROCK 5A EDK2 release-candidate artifacts are also available,
 with a board-bound read-only Linux platform probe. See
@@ -27,8 +28,8 @@ data under `validation/<board>/stable/`.
 - Run reproducible ROCKPro64 USB and serial validation flows.
 - Package ROCKPro64 RK3399 U-Boot, TF-A, SPI installer, and shared-storage
   images with Nix.
-- Package a Raspberry Pi 3 B+ FAT boot partition image with Raspberry Pi
-  firmware, DTB, and U-Boot.
+- Package a Raspberry Pi 3 B+ MBR SD card image (FAT boot partition with Raspberry Pi
+  firmware, Pi 3 family DTBs, and U-Boot) with Nix.
 - Expose NixOS modules for board boot-file installation and bootable profiles.
 
 ## Status
@@ -37,7 +38,7 @@ ROCKPro64 is the primary target. The SPI installer target is flashable as a
 release candidate; shared-storage image flashing remains gated unless the
 operator explicitly allows non-flashable artifacts for lab work.
 
-Raspberry Pi 3 B+ support currently produces a release-candidate boot partition
+Raspberry Pi 3 B+ support currently produces a release-candidate MBR SD card
 image. It does not claim stable support until validation evidence is imported
 under `validation/raspberrypi3bplus/stable/`.
 
@@ -77,11 +78,11 @@ nix run .#flash -- \
   --dry-run
 ```
 
-Dry-run a Raspberry Pi 3 B+ boot partition flash:
+Dry-run a Raspberry Pi 3 B+ SD card image flash:
 
 ```sh
 nix run .#flash -- \
-  --target raspberrypi3bplus-boot-partition \
+  --target raspberrypi3bplus-sd-card \
   --device /dev/sdX \
   --dry-run
 ```
@@ -189,7 +190,10 @@ For ROCKPro64, stable promotion requires:
 - serial logs for every claimed scenario
 - a successful build of `.#rockpro64-stable-release-bundle`
 
-For Raspberry Pi 3 B+, stable promotion requires equivalent evidence under:
+For Raspberry Pi 3 B+, stable promotion requires equivalent evidence (scenarios
+`serial-u-boot-prompt`, `family-dtb-check`, `sd-extlinux-boot`, all in one run on an OS image rather than the firmware-only `sd-card.img`) and a successful build of
+`.#raspberrypi3bplus-stable-release-bundle`. See
+[the lab runbook](docs/src/raspberrypi3bplus/lab-runbook.md). Evidence lives under:
 
 ```text
 validation/raspberrypi3bplus/stable/
@@ -197,9 +201,8 @@ validation/raspberrypi3bplus/stable/
 
 ## Development
 
-The repository uses Nix for repeatable tooling and generated GitHub Actions CI for
-testing. The generated CI workflows run package tests and clippy through
-`nix develop`, and run `nix flake check`.
+The repository uses Nix for repeatable tooling. CI qualification runs in the
+`caniko/fleet` superproject; only the Pages workflow lives here.
 
 Useful local commands:
 

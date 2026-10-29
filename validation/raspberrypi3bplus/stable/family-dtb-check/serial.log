@@ -1,0 +1,11 @@
+
+# bootswain sent autoboot interrupt while waiting for U-Boot prompt
+
+U-Boot> 
+# bootswain cleared stale serial input before command for print board model from the firmware DTB
+
+# bootswain sent: fdt addr ${fdt_addr}; fdt print / model; fdt print / compatible
+fdt addr ${fdt_addr}; fdt print / model; fdt print / compatible
+Working FDT set to 3af04f30
+model = "Raspberry Pi 3 Model B Plus Rev 1.3"
+compatible = "raspberrypi,3-model-b-plus",

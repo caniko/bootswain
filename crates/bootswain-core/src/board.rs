@@ -6,6 +6,7 @@ pub enum Board {
     RaspberryPi3BPlus,
     #[serde(rename = "raspberry-pi-5")]
     RaspberryPi5,
+    #[serde(rename = "rockpro64", alias = "rock-pro64")]
     RockPro64,
     #[serde(rename = "rock-5a")]
     Rock5A,

@@ -3,19 +3,15 @@ use bootswain_cli::{
     qemu::{DEFAULT_QEMU_ARM64_CPU, QemuArm64RunConfig, run_qemu_arm64_validation},
     render_firmware_artifacts_human, render_firmware_manifest_human, render_flash_plan_human,
     render_flash_verification_human, render_image_info_human, render_probe_summary_human,
-    render_validation_run_human,
-    rockpro64_serial::{
-        RockPro64SerialRunConfig, rockpro64_serial_selected_outcomes_passed,
-        run_rockpro64_serial_validation,
-    },
-    run_flash_execution,
+    render_validation_run_human, run_flash_execution,
+    uboot_serial::{SerialRunConfig, run_serial_validation, serial_selected_outcomes_passed},
 };
 use bootswain_core::{
     FlashExecutionResult, FlashRunResult, ValidationExecutorKind, ValidationOutcome,
     ValidationOutcomeStatus, ValidationPlan, ValidationRun, read_json_file, write_pretty_json_file,
 };
 use bootswain_flash::{
-    execute_flash, inspect_image, plan_flash, validate_required_device_size,
+    execute_flash, inspect_image, payload_size_bytes, plan_flash, validate_required_device_size,
     validate_target_device, verify_flash,
 };
 use bootswain_probe::{ProbeConfig, run_rockpro64_usb_probe};
@@ -130,19 +126,33 @@ fn run_flash(command: FlashCommand) -> Result<()> {
             }
             let validated = validate_target_device(&device)?;
             let plan = plan_flash(&image_info, &validated, dry_run);
-            if let Some((_, artifact)) = &selected_artifact {
-                let required_bytes = artifact
-                    .required_device_size_bytes
-                    .unwrap_or(plan.image.size_bytes);
-                validate_required_device_size(&plan, required_bytes)?;
-            }
+            // size_bytes is the compressed size for .zst, so check the decoded payload.
+            let required_bytes = match selected_artifact
+                .as_ref()
+                .and_then(|(_, artifact)| artifact.required_device_size_bytes)
+            {
+                Some(bytes) => bytes,
+                None => payload_size_bytes(&plan.image)?,
+            };
+            validate_required_device_size(&plan, required_bytes)?;
 
             if !json {
                 print!("{}", render_flash_plan_human(&plan));
             }
 
-            if !dry_run && !verify_only && !yes {
-                confirm_device_write(&plan.device.canonical_path, json)?;
+            if !dry_run && !verify_only {
+                if !yes {
+                    confirm_device_write(&plan.device.canonical_path, json)?;
+                }
+                // The operator may have mounted the disk while the prompt was open.
+                let revalidated = validate_target_device(&device)?;
+                if revalidated.info.canonical_path != plan.device.canonical_path {
+                    bail!(
+                        "target device changed from {} to {} during confirmation",
+                        plan.device.canonical_path.display(),
+                        revalidated.info.canonical_path.display()
+                    );
+                }
             }
 
             let execution = if verify_only {
@@ -158,12 +168,13 @@ fn run_flash(command: FlashCommand) -> Result<()> {
             } else {
                 None
             };
+            let result = FlashRunResult {
+                execution,
+                verification,
+            };
+            let device_path = &result.execution.plan.device.canonical_path;
             if json {
-                if verification.is_some() {
-                    let result = FlashRunResult {
-                        execution: execution.clone(),
-                        verification: verification.clone(),
-                    };
+                if result.verification.is_some() {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&result)
@@ -176,30 +187,23 @@ fn run_flash(command: FlashCommand) -> Result<()> {
                             .context("failed to render flash JSON")?
                     );
                 }
-                if let Some(bytes_written) = execution.bytes_written {
-                    eprintln!(
-                        "wrote {} bytes to {}",
-                        bytes_written,
-                        execution.plan.device.canonical_path.display()
-                    );
+                if let Some(bytes_written) = result.execution.bytes_written {
+                    eprintln!("wrote {} bytes to {}", bytes_written, device_path.display());
                 }
             } else {
-                if let Some(bytes_written) = execution.bytes_written {
-                    println!(
-                        "wrote {} bytes to {}",
-                        bytes_written,
-                        execution.plan.device.canonical_path.display()
-                    );
+                if let Some(bytes_written) = result.execution.bytes_written {
+                    println!("wrote {} bytes to {}", bytes_written, device_path.display());
                 }
-                if let Some(verification) = &verification {
+                if let Some(verification) = &result.verification {
                     print!("{}", render_flash_verification_human(verification));
                 }
             }
 
-            if let Some(verification) = verification {
-                if !verification.matched {
-                    bail!("flash verification failed");
-                }
+            if result
+                .verification
+                .is_some_and(|verification| !verification.matched)
+            {
+                bail!("flash verification failed");
             }
         }
     }
@@ -370,7 +374,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 bail!("QEMU validation failed");
             }
         }
-        ValidateCommand::Rockpro64Serial {
+        ValidateCommand::Serial {
             plan,
             port,
             baud,
@@ -386,7 +390,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
             }
             let cancellation = Arc::new(AtomicBool::new(false));
             install_validation_interrupt_handler(cancellation.clone())?;
-            let config = RockPro64SerialRunConfig {
+            let config = SerialRunConfig {
                 port,
                 baud,
                 out: out.clone(),
@@ -397,7 +401,7 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 max_step_timeout: max_step_timeout_secs.map(Duration::from_secs),
                 cancellation,
             };
-            let run = run_rockpro64_serial_validation(plan, &config)?;
+            let run = run_serial_validation(plan, &config)?;
 
             if json {
                 println!(
@@ -417,15 +421,15 @@ fn run_validate(command: ValidateCommand) -> Result<()> {
                 );
             }
 
-            if !rockpro64_serial_selected_outcomes_passed(&run) {
+            if !serial_selected_outcomes_passed(&run) {
                 if run
                     .outcomes
                     .iter()
                     .any(|outcome| outcome.status == ValidationOutcomeStatus::Interrupted)
                 {
-                    bail!("ROCKPro64 serial validation interrupted");
+                    bail!("{} serial validation interrupted", run.plan.board);
                 }
-                bail!("ROCKPro64 serial validation failed");
+                bail!("{} serial validation failed", run.plan.board);
             }
         }
     }

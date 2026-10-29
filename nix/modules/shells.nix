@@ -3,9 +3,9 @@
   pkgs,
   cross,
   toolchain,
+  treefmtWrapper,
   plinthProject,
-}:
-{
+}: {
   devShells =
     (harbor-rs.lib.mkDevShells {
       inherit pkgs cross;
@@ -15,6 +15,7 @@
         pkgs.zstd
       ];
       packages = [
+        treefmtWrapper
         pkgs.cargo-audit
         pkgs.cargo-deny
         pkgs.dosfstools

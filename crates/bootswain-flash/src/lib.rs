@@ -6,4 +6,4 @@ pub use device::{
     plan_flash, validate_required_device_size, validate_target_device, validate_target_device_with,
     verify_flash,
 };
-pub use image::{detect_compression, inspect_image, sha256_file};
+pub use image::{detect_compression, inspect_image, payload_size_bytes, sha256_file};

@@ -15,6 +15,7 @@ fn public_enum_wire_names_are_stable() {
         (FirmwareArtifactKind::SpiFirmware, "spi-firmware"),
         (FirmwareArtifactKind::SpiInstaller, "spi-installer"),
         (FirmwareArtifactKind::SharedDiskImage, "shared-disk-image"),
+        (FirmwareArtifactKind::SdCardImage, "sd-card-image"),
         (
             FirmwareArtifactKind::BootPartitionImage,
             "boot-partition-image",
@@ -109,6 +110,15 @@ fn public_enum_wire_names_are_stable() {
         "\"rockpro64-serial\""
     );
     assert_eq!(
+        serde_json::to_string(&ValidationExecutorKind::UBootSerial)
+            .expect("serialize u-boot-serial executor"),
+        "\"u-boot-serial\""
+    );
+    assert_eq!(
+        ValidationExecutorKind::UBootSerial.to_string(),
+        "u-boot-serial"
+    );
+    assert_eq!(
         "usb-storage"
             .parse::<QemuDiskInterface>()
             .expect("parse qemu disk"),
@@ -130,7 +140,7 @@ fn firmware_manifest_round_trips() {
     let manifest = sample_manifest();
 
     let json = serde_json::to_string_pretty(&manifest).expect("serialize manifest");
-    assert!(json.contains("\"board\": \"rock-pro64\""));
+    assert!(json.contains("\"board\": \"rockpro64\""));
     assert!(json.contains("\"kind\": \"spi-installer\""));
 
     let decoded: FirmwareManifest = serde_json::from_str(&json).expect("decode manifest");
@@ -179,6 +189,7 @@ fn validation_plan_and_run_round_trip() {
             qemu_args: vec!["-nographic".into()],
             timeout_secs: 5,
         }),
+        uboot_prompt: None,
         scenarios: vec![ValidationScenario {
             name: "prompt".into(),
             kind: ValidationScenarioKind::Prompt,
@@ -220,6 +231,7 @@ fn validation_run_requires_all_outcomes_to_pass() {
             release: "2026.04-rockpro64.0".into(),
             executor: ValidationExecutorKind::Deferred,
             qemu: None,
+            uboot_prompt: None,
             scenarios: Vec::new(),
         },
         outcomes: vec![ValidationOutcome {
@@ -318,4 +330,20 @@ fn sample_flash_plan() -> FlashPlan {
         strategy: FlashStrategy::RawCopy,
         dry_run: false,
     }
+}
+
+#[test]
+fn rockpro64_wire_name_matches_as_str_and_accepts_legacy_spelling() {
+    assert_eq!(
+        serde_json::to_string(&Board::RockPro64).expect("serialize"),
+        "\"rockpro64\""
+    );
+    for name in ["rockpro64", "rock-pro64"] {
+        let board: Board = serde_json::from_str(&format!("\"{name}\"")).expect("deserialize");
+        assert_eq!(board, Board::RockPro64);
+    }
+    assert_eq!(
+        crate::AutobootResult::WarnEnumerate.to_string(),
+        "warn+enumerate"
+    );
 }

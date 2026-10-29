@@ -2,8 +2,9 @@ use anyhow::{Context, Result, bail};
 use bootswain_core::{CompressionKind, ImageInfo};
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io;
 use std::path::Path;
+use zstd::stream::read::Decoder;
 
 pub fn inspect_image(path: &Path) -> Result<ImageInfo> {
     let compression = detect_compression(path)?;
@@ -41,29 +42,51 @@ pub fn detect_compression(path: &Path) -> Result<CompressionKind> {
     }
 }
 
-pub fn sha256_file(path: &Path) -> Result<String> {
-    let file =
-        File::open(path).with_context(|| format!("failed to open image {}", path.display()))?;
-    let mut reader = BufReader::new(file);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 16 * 1024];
+/// sha2 0.11 dropped its `io::Write` impl; this keeps `io::copy` doing the buffering.
+struct HashWriter<'a>(&'a mut Sha256);
 
-    loop {
-        let read = reader
-            .read(&mut buffer)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
+impl io::Write for HashWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.update(buf);
+        Ok(buf.len())
     }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+pub fn sha256_file(path: &Path) -> Result<String> {
+    let mut file =
+        File::open(path).with_context(|| format!("failed to open image {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut HashWriter(&mut hasher))
+        .with_context(|| format!("failed to read {}", path.display()))?;
 
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// Bytes a flash writes to the device: the image size, or for zstd the number of bytes
+/// the decoder yields across all frames (the same stream flashing writes).
+pub fn payload_size_bytes(image: &ImageInfo) -> Result<u64> {
+    if image.compression == CompressionKind::None {
+        return Ok(image.size_bytes);
+    }
+
+    // ponytail: the extra full decode pass is fine for firmware-sized images; sum frame
+    // headers instead if large images appear.
+    let mut reader = Decoder::new(
+        File::open(&image.path)
+            .with_context(|| format!("failed to open image {}", image.path.display()))?,
+    )
+    .with_context(|| format!("failed to decode {}", image.path.display()))?;
+    io::copy(&mut reader, &mut io::sink())
+        .with_context(|| format!("failed to decode {}", image.path.display()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{detect_compression, inspect_image};
+    use super::{detect_compression, inspect_image, payload_size_bytes};
     use bootswain_core::CompressionKind;
     use std::fs;
     use tempfile::tempdir;
@@ -84,6 +107,45 @@ mod tests {
         assert_eq!(
             detect_compression(&zstd).expect("zstd compression"),
             CompressionKind::Zstd
+        );
+    }
+
+    fn zstd_image(path: &std::path::Path, frames: &[&[u8]]) -> bootswain_core::ImageInfo {
+        // encode_all emits one complete frame per call; concatenated frames are valid zstd.
+        let bytes: Vec<u8> = frames
+            .iter()
+            .flat_map(|frame| zstd::encode_all(*frame, 0).expect("encode"))
+            .collect();
+        fs::write(path, bytes).expect("write zst");
+        bootswain_core::ImageInfo {
+            path: path.to_path_buf(),
+            compression: CompressionKind::Zstd,
+            size_bytes: fs::metadata(path).expect("metadata").len(),
+            sha256: String::new(),
+        }
+    }
+
+    #[test]
+    fn zstd_payload_size_is_the_decoded_size() {
+        let tmp = tempdir().expect("tempdir");
+        let payload = vec![0_u8; 1 << 20];
+        let image = zstd_image(&tmp.path().join("a.img.zst"), &[&payload]);
+
+        // Highly compressible: the file is tiny, the payload is 1 MiB.
+        assert!(image.size_bytes < 1024);
+        assert_eq!(payload_size_bytes(&image).expect("size"), 1 << 20);
+    }
+
+    #[test]
+    fn concatenated_zstd_frames_are_summed() {
+        let tmp = tempdir().expect("tempdir");
+        let first = vec![0_u8; 1 << 20];
+        let second = vec![1_u8; 512 << 10];
+        let image = zstd_image(&tmp.path().join("c.img.zst"), &[&first, &second]);
+
+        assert_eq!(
+            payload_size_bytes(&image).expect("size"),
+            (1 << 20) + (512 << 10)
         );
     }
 

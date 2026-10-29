@@ -8,7 +8,7 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-CI runs:
+CI qualification runs in the `caniko/fleet` superproject and covers:
 
 - `cargo build`
 - `cargo test`

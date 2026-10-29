@@ -44,11 +44,11 @@ nix run .#flash -- \
   --device /dev/sdb \
   --dry-run
 nix run .#flash -- \
-  --target raspberrypi3bplus-boot-partition \
+  --target raspberrypi3bplus-sd-card \
   --device /dev/sdb \
   --dry-run
 ```
 
-The release-candidate ROCKPro64 SPI installer and Raspberry Pi 3 B+ boot
-partition image are flashable. Shared-storage ROCKPro64 images remain gated
+The release-candidate ROCKPro64 SPI installer and Raspberry Pi 3 B+ SD card
+image are flashable. Shared-storage ROCKPro64 images remain gated
 until matching SD/eMMC hardware validation evidence is imported.

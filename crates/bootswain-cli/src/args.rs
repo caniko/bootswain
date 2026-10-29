@@ -146,14 +146,16 @@ pub(crate) enum ValidateCommand {
         #[arg(long)]
         json: bool,
     },
-    Rockpro64Serial {
+    /// Run a plan against a board's U-Boot shell over a serial port.
+    #[command(alias = "rockpro64-serial")]
+    Serial {
         #[arg(long)]
         plan: PathBuf,
         #[arg(long)]
         port: String,
         #[arg(long, default_value_t = 115_200)]
         baud: u32,
-        #[arg(long, default_value = "bootswain-rockpro64-serial-output")]
+        #[arg(long, default_value = "bootswain-serial-output")]
         out: PathBuf,
         #[arg(long = "scenario")]
         scenarios: Vec<String>,

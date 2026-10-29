@@ -42,11 +42,11 @@ nix run .#flash -- \
   --dry-run
 ```
 
-Dry-run the release-candidate Raspberry Pi 3 B+ boot partition target:
+Dry-run the release-candidate Raspberry Pi 3 B+ SD card image target:
 
 ```sh
 nix run .#flash -- \
-  --target raspberrypi3bplus-boot-partition \
+  --target raspberrypi3bplus-sd-card \
   --device /dev/sdb \
   --dry-run
 ```

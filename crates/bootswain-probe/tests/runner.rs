@@ -223,3 +223,93 @@ fn no_prompt_timeout_marks_autoboot_failure() {
     assert_eq!(trial.usb_tree_result, ProbeStepResult::NotRun);
     assert_eq!(trial.usb_reset_result, ProbeStepResult::NotRun);
 }
+
+/// Never reaches a prompt and never goes quiet.
+struct ChattySerial;
+
+impl SerialIo for ChattySerial {
+    fn clear(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn read_chunk(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        buffer[..4].copy_from_slice(b"spam");
+        Ok(4)
+    }
+
+    fn write_all(&mut self, _buffer: &[u8]) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn continuous_output_still_times_out() {
+    let tmp = tempdir().expect("tempdir");
+    let trial_dir = tmp.path().join("trial-1");
+    std::fs::create_dir_all(&trial_dir).expect("trial dir");
+
+    let started = std::time::Instant::now();
+    let trial = run_trial_with_session(
+        &mut ChattySerial,
+        &test_config(tmp.path().into()),
+        1,
+        &trial_dir,
+    )
+    .expect("chatty trial");
+
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(trial.failure_stage, FailureStage::Autoboot);
+}
+
+/// Yields one chunk of output, then fails.
+struct FailingSerial {
+    sent: bool,
+}
+
+impl SerialIo for FailingSerial {
+    fn clear(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn read_chunk(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.sent {
+            return Err(io::Error::other("cable pulled"));
+        }
+        self.sent = true;
+        buffer[..11].copy_from_slice(b"U-Boot 2026");
+        Ok(11)
+    }
+
+    fn write_all(&mut self, _buffer: &[u8]) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn serial_error_still_persists_partial_trial() {
+    let tmp = tempdir().expect("tempdir");
+    let trial_dir = tmp.path().join("trial-1");
+    std::fs::create_dir_all(&trial_dir).expect("trial dir");
+
+    let error = run_trial_with_session(
+        &mut FailingSerial { sent: false },
+        &test_config(tmp.path().into()),
+        1,
+        &trial_dir,
+    )
+    .expect_err("serial failure");
+
+    assert!(format!("{error:#}").contains("cable pulled"));
+    let log = std::fs::read_to_string(trial_dir.join("serial.log")).expect("serial log");
+    assert_eq!(log, "U-Boot 2026");
+    let trial = std::fs::read_to_string(trial_dir.join("trial.json")).expect("trial json");
+    assert!(trial.contains("\"failure_stage\": \"autoboot\""));
+}

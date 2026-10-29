@@ -12,6 +12,7 @@ publish = false
 anyhow.workspace = true
 bootswain-core = { path = "../bootswain-core" }
 hex.workspace = true
+rustix.workspace = true
 sha2.workspace = true
 zstd.workspace = true
 
