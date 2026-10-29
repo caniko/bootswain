@@ -2,14 +2,15 @@
 
 <!-- simit:badges:start -->
 
-[![CI](https://img.shields.io/badge/CI-drift-2088ff)](https://github.com/caniko/fleet/actions) [![Nix](https://img.shields.io/badge/Nix-drift-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
+[![CI](https://img.shields.io/badge/CI-drift-2088ff)](https://github.com/caniko/fleet/actions) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs)
 
 <!-- simit:badges:end -->
 
 `bootswain` is a Rust workspace for repeatable host-side board flashing,
 firmware inspection, serial probing, and validation workflows around U-Boot.
-The current focus is ROCKPro64 firmware work, with Raspberry Pi 3 B+ SD card
-image tooling (and best-effort Pi 3 family firmware) also present as release-candidate support.
+The current focus is ROCKPro64 firmware work, with hardware-validated Raspberry Pi 3 B+
+SD card firmware (stable evidence under `validation/raspberrypi3bplus/stable/`) and
+best-effort Pi 3 family firmware.
 
 Pi 5 U-Boot UEFI and ROCK 5A EDK2 release-candidate artifacts are also available,
 with a board-bound read-only Linux platform probe. See
