@@ -190,7 +190,7 @@ For ROCKPro64, stable promotion requires:
 - a successful build of `.#rockpro64-stable-release-bundle`
 
 For Raspberry Pi 3 B+, stable promotion requires equivalent evidence (scenarios
-`serial-u-boot-prompt`, `family-dtb-check`, `sd-extlinux-boot`) and a successful build of
+`serial-u-boot-prompt`, `family-dtb-check`, `sd-extlinux-boot`, all in one run on an OS image rather than the firmware-only `sd-card.img`) and a successful build of
 `.#raspberrypi3bplus-stable-release-bundle`. See
 [the lab runbook](docs/src/raspberrypi3bplus/lab-runbook.md). Evidence lives under:
 

@@ -29,7 +29,7 @@
         {
           "name": "print board model from the firmware DTB",
           "command": "fdt addr ${fdt_addr}; fdt print /model",
-          "expect": ["Raspberry Pi 3 Model B Plus"],
+          "expect": ["Raspberry Pi 3 Model B+"],
           "timeout_secs": 15
         }
       ]

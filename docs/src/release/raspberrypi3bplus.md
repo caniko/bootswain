@@ -36,6 +36,6 @@ imported under `validation/raspberrypi3bplus/stable/`. Then:
 nix build .#raspberrypi3bplus-stable-release-bundle
 ```
 
-This requires `validation-run.json` with the scenarios `serial-u-boot-prompt`,
-`family-dtb-check` and `sd-extlinux-boot` passed, plus their serial logs. See the
+This requires one `validation-run.json` (from `just rpi3bplus-validate` on an OS image) with `serial-u-boot-prompt`,
+`family-dtb-check` and `sd-extlinux-boot` passed, plus their serial logs. The firmware-only `sd-card.img` cannot pass `sd-extlinux-boot`. See the
 [lab runbook](../raspberrypi3bplus/lab-runbook.md).

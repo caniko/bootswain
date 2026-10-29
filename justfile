@@ -133,7 +133,7 @@ rpi3bplus-validate-scenario scenario port="/dev/ttyUSB0" baud="115200" out="boot
         --out "{{ out }}" \
         --scenario "{{ scenario }}"
 
-# Run all Raspberry Pi 3 B+ serial validation scenarios.
+# Run the three Raspberry Pi 3 B+ scenarios stable promotion requires, in one validation-run.json.
 [arg("port", long="port", help="Serial device path")]
 [arg("baud", long="baud", help="Serial baud rate")]
 [arg("out", long="out", help="Validation output directory")]
@@ -145,5 +145,16 @@ rpi3bplus-validate port="/dev/ttyUSB0" baud="115200" out="bootswain-rpi3bplus-ru
         --out "{{ out }}" \
         --scenario serial-u-boot-prompt \
         --scenario family-dtb-check \
-        --scenario sd-extlinux-boot \
+        --scenario sd-extlinux-boot
+
+# Run the Raspberry Pi 3 B+ USB extlinux scenario (not required for stable promotion).
+[arg("port", long="port", help="Serial device path")]
+[arg("baud", long="baud", help="Serial baud rate")]
+[arg("out", long="out", help="Validation output directory")]
+rpi3bplus-validate-usb port="/dev/ttyUSB0" baud="115200" out="bootswain-rpi3bplus-usb-run":
+    nix develop --command cargo run -p bootswain-cli -- validate serial \
+        --plan validation/raspberrypi3bplus/lab-plan.json \
+        --port "{{ port }}" \
+        --baud "{{ baud }}" \
+        --out "{{ out }}" \
         --scenario usb-extlinux-boot
