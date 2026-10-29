@@ -189,6 +189,7 @@ fn validation_plan_and_run_round_trip() {
             qemu_args: vec!["-nographic".into()],
             timeout_secs: 5,
         }),
+        uboot_prompt: None,
         scenarios: vec![ValidationScenario {
             name: "prompt".into(),
             kind: ValidationScenarioKind::Prompt,
@@ -230,6 +231,7 @@ fn validation_run_requires_all_outcomes_to_pass() {
             release: "2026.04-rockpro64.0".into(),
             executor: ValidationExecutorKind::Deferred,
             qemu: None,
+            uboot_prompt: None,
             scenarios: Vec::new(),
         },
         outcomes: vec![ValidationOutcome {

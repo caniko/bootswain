@@ -32,13 +32,22 @@ pub fn segment_has_prompt(text: &str) -> bool {
     segment_has_prompt_in(text, true)
 }
 
+/// Shell prompts recognized without knowing the board: the default `=> ` and the
+/// `U-Boot> ` that nixpkgs' Raspberry Pi builds print.
+const PROMPTS: [&str; 2] = ["=> ", "U-Boot> "];
+
 /// Prompt check for a rescan window of a longer segment; `at_segment_start` says whether
-/// the window begins where the segment does (the only place a bare leading `=> ` counts).
+/// the window begins where the segment does (the only place a bare leading prompt counts).
 pub fn segment_has_prompt_in(window: &str, at_segment_start: bool) -> bool {
-    (at_segment_start && window.starts_with("=> "))
-        || window.contains("\n=> ")
-        || window.ends_with("=> ")
-        || window.ends_with("=>")
+    PROMPTS.iter().any(|prompt| {
+        (at_segment_start && window.starts_with(prompt))
+            || window
+                .split('\n')
+                .skip(1)
+                .any(|line| line.starts_with(prompt))
+            || window.ends_with(prompt)
+            || window.ends_with(prompt.trim_end())
+    })
 }
 
 /// A U-Boot stage banner at the start of a line, i.e. the board restarted its boot chain.
@@ -162,6 +171,10 @@ mod tests {
         assert!(!segment_has_prompt_in("=> x", false));
         assert!(segment_has_prompt_in("x\n=> x", false));
         assert!(segment_has_prompt_in("boot =>", false));
+        assert!(segment_has_prompt_in("U-Boot> ", true));
+        assert!(segment_has_prompt_in("x\r\nU-Boot> ", false));
+        assert!(segment_has_prompt_in("boot U-Boot>", false));
+        assert!(!segment_has_prompt_in("U-Boot> x", false));
         assert!(segment_has_boot_banner("x\nU-Boot SPL 2026"));
         let markers = [
             "Synchronous Abort",

@@ -96,6 +96,7 @@ pub(super) fn sample_plan() -> ValidationPlan {
         release: "test".into(),
         executor: ValidationExecutorKind::RockPro64Serial,
         qemu: None,
+        uboot_prompt: None,
         scenarios: vec![
             ValidationScenario {
                 name: "recovery-console".into(),

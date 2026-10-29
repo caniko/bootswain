@@ -122,7 +122,7 @@ where
         }
 
         progressln(config, &format!("scenario {}: starting", scenario.name));
-        let outcome = run_scenario(session, scenario, config, executor)?;
+        let outcome = run_scenario(session, scenario, plan.uboot_prompt(), config, executor)?;
         match outcome.status {
             ValidationOutcomeStatus::Failed => stopped_after = Some(outcome.scenario.clone()),
             ValidationOutcomeStatus::Interrupted => interrupted = true,

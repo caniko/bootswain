@@ -17,6 +17,7 @@ use std::time::Duration;
 pub(super) fn run_scenario<T>(
     session: &mut T,
     scenario: &ValidationScenario,
+    prompt: &str,
     config: &SerialRunConfig,
     executor: ValidationExecutorKind,
 ) -> Result<ValidationOutcome>
@@ -44,7 +45,7 @@ where
 
     let mut log = String::new();
     let mut evidence = Vec::new();
-    let result = run_steps(session, scenario, config, &mut log, &mut evidence);
+    let result = run_steps(session, scenario, prompt, config, &mut log, &mut evidence);
 
     // Persist what was captured before reporting, including after an I/O error, so a
     // failed scenario always leaves its serial log behind.
@@ -75,6 +76,7 @@ where
 fn run_steps<T>(
     session: &mut T,
     scenario: &ValidationScenario,
+    prompt: &str,
     config: &SerialRunConfig,
     log: &mut String,
     evidence: &mut Vec<String>,
@@ -83,7 +85,7 @@ where
     T: SerialIo,
 {
     for step in &scenario.steps {
-        match run_step(session, scenario, step, config, log)? {
+        match run_step(session, scenario, step, prompt, config, log)? {
             StepResult::Passed(mut step_evidence) => evidence.append(&mut step_evidence),
             terminal => return Ok(terminal),
         }
@@ -101,6 +103,7 @@ fn run_step<T>(
     session: &mut T,
     scenario: &ValidationScenario,
     step: &ValidationStep,
+    prompt: &str,
     config: &SerialRunConfig,
     log: &mut String,
 ) -> Result<StepResult>
@@ -135,7 +138,7 @@ where
             },
             &config.cancellation,
             log,
-            &["=> ".to_owned()],
+            &[prompt.to_owned()],
         )?;
         match prompt_read.status {
             ReadStatus::Matched => {
@@ -191,7 +194,7 @@ where
     // A prompt-only step races U-Boot's bootdelay just like a command step, so it also
     // requests the prompt; the boot banner it waits through is expected, not a reset.
     let waits_for_prompt =
-        step.command.is_none() && step.expect.iter().any(|pattern| pattern == "=> ");
+        step.command.is_none() && step.expect.iter().any(|pattern| pattern == prompt);
     if waits_for_prompt {
         let _ = write!(
             log,

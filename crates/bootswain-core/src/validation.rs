@@ -126,7 +126,17 @@ pub struct ValidationPlan {
     pub executor: ValidationExecutorKind,
     #[serde(default)]
     pub qemu: Option<QemuValidationConfig>,
+    /// Shell prompt the board prints (`CONFIG_SYS_PROMPT`); defaults to `=> `.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uboot_prompt: Option<String>,
     pub scenarios: Vec<ValidationScenario>,
+}
+
+impl ValidationPlan {
+    #[must_use]
+    pub fn uboot_prompt(&self) -> &str {
+        self.uboot_prompt.as_deref().unwrap_or("=> ")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

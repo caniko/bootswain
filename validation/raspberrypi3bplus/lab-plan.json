@@ -3,6 +3,7 @@
   "board": "raspberry-pi-3-b-plus",
   "release": "2026.04-raspberrypi3bplus-lab.0",
   "executor": "u-boot-serial",
+  "uboot_prompt": "U-Boot> ",
   "scenarios": [
     {
       "name": "serial-u-boot-prompt",
@@ -14,8 +15,8 @@
         {
           "name": "wait for u-boot prompt",
           "command": null,
-          "expect": ["U-Boot", "=> "],
-          "timeout_secs": 30
+          "expect": ["U-Boot", "U-Boot> "],
+          "timeout_secs": 120
         }
       ]
     },

@@ -562,3 +562,20 @@ fn prompt_only_step_requests_the_prompt_through_boot_banners() {
     );
     assert_eq!(serial.writes, vec!["\n"]);
 }
+
+#[test]
+fn command_step_waits_for_board_specific_prompt() {
+    let tmp = tempdir().expect("tempdir");
+    let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+    let mut serial = FakeSerial::with_chunks(&[
+        "U-Boot 2026.04\nHit any key to stop autoboot:  0\nU-Boot> ",
+        "Scanning for bootflows\nU-Boot> ",
+    ]);
+    let mut plan = sample_plan();
+    plan.uboot_prompt = Some("U-Boot> ".into());
+
+    let run = run_serial_validation_with_session(plan, &config, &mut serial).expect("run");
+
+    assert!(serial_selected_outcomes_passed(&run));
+    assert_eq!(serial.writes, vec!["bootflow scan\n"]);
+}
