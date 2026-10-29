@@ -7,6 +7,7 @@
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
+    treefmt-nix.follows = "harbor-rs/treefmt-nix";
     plinth = {
       url = "git+https://github.com/caniko/plinth.git?ref=trunk";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -20,6 +21,7 @@
     plinth,
     rust-overlay,
     flake-utils,
+    treefmt-nix,
     ...
   }: let
     # Optional macOS SDK (store path + version) for darwin cross builds; omitted by default.
@@ -29,7 +31,7 @@
     }: system:
       import ./nix/per-system.nix {
         root = ./.;
-        inherit plinth;
+        inherit plinth treefmt-nix;
         inherit self nixpkgs harbor-rs rust-overlay system macosSdkStorePath osxSdkVersion;
       };
   in

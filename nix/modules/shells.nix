@@ -3,6 +3,7 @@
   pkgs,
   cross,
   toolchain,
+  treefmtWrapper,
   plinthProject,
 }:
 {
@@ -15,6 +16,7 @@
         pkgs.zstd
       ];
       packages = [
+        treefmtWrapper
         pkgs.cargo-audit
         pkgs.cargo-deny
         pkgs.dosfstools

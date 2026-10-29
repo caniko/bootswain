@@ -3,6 +3,7 @@
   self,
   nixpkgs,
   plinth,
+  treefmt-nix,
   harbor-rs,
   rust-overlay,
   system,
@@ -87,8 +88,11 @@
     docsPackage = sites.packages.site or null;
   };
 
+  treefmtWrapper =
+    (treefmt-nix.lib.evalModule pkgs (import ./treefmt.nix {rustfmtPackage = toolchain.rustToolchain;})).config.build.wrapper;
+
   shells = import ./modules/shells.nix {
-    inherit harbor-rs pkgs cross toolchain;
+    inherit harbor-rs pkgs cross toolchain treefmtWrapper;
     plinthProject = plinth.packages.${system}.plinth-project;
   };
 
@@ -325,5 +329,6 @@ in {
       rockpro64-nixos-module = nixosModuleChecks.rockpro64;
       raspberrypi3bplus-nixos-module = nixosModuleChecks.raspberrypi3bplus;
     };
+  formatter = treefmtWrapper;
   inherit (shells) devShells;
 }
