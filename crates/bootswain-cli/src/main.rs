@@ -3,12 +3,8 @@ use bootswain_cli::{
     qemu::{DEFAULT_QEMU_ARM64_CPU, QemuArm64RunConfig, run_qemu_arm64_validation},
     render_firmware_artifacts_human, render_firmware_manifest_human, render_flash_plan_human,
     render_flash_verification_human, render_image_info_human, render_probe_summary_human,
-    render_validation_run_human,
-    uboot_serial::{
-        SerialRunConfig, serial_selected_outcomes_passed,
-        run_serial_validation,
-    },
-    run_flash_execution,
+    render_validation_run_human, run_flash_execution,
+    uboot_serial::{SerialRunConfig, run_serial_validation, serial_selected_outcomes_passed},
 };
 use bootswain_core::{
     FlashExecutionResult, FlashRunResult, ValidationExecutorKind, ValidationOutcome,
@@ -203,7 +199,10 @@ fn run_flash(command: FlashCommand) -> Result<()> {
                 }
             }
 
-            if result.verification.is_some_and(|verification| !verification.matched) {
+            if result
+                .verification
+                .is_some_and(|verification| !verification.matched)
+            {
                 bail!("flash verification failed");
             }
         }

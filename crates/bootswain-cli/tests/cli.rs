@@ -399,7 +399,11 @@ fn legacy_rockpro64_serial_subcommand_alias_still_parses() {
         .stderr
         .clone();
 
-    assert!(String::from_utf8(stderr).expect("utf8").contains("does not contain scenario"));
+    assert!(
+        String::from_utf8(stderr)
+            .expect("utf8")
+            .contains("does not contain scenario")
+    );
 }
 
 #[test]

@@ -148,8 +148,8 @@ fn timeout_marks_selected_scenario_failed() {
     let mut plan = sample_plan();
     plan.scenarios[0].steps[0].timeout_secs = 0;
 
-    let run = run_serial_validation_with_session(plan, &config, &mut serial)
-        .expect("serial validation");
+    let run =
+        run_serial_validation_with_session(plan, &config, &mut serial).expect("serial validation");
 
     let outcome = run
         .outcomes
@@ -324,8 +324,8 @@ fn expected_no_bootable_media_marker_still_passes() {
     plan.scenarios[1].steps[0].expect = vec!["No bootable media on SD".into()];
     let mut serial = FakeSerial::with_chunks(&["=> ", "No bootable media on SD\n=> "]);
 
-    let run = run_serial_validation_with_session(plan, &config, &mut serial)
-        .expect("serial validation");
+    let run =
+        run_serial_validation_with_session(plan, &config, &mut serial).expect("serial validation");
 
     let outcome = run
         .outcomes
@@ -461,9 +461,8 @@ fn serial_io_error_is_recorded_and_run_file_still_written() {
         false,
     );
 
-    let run =
-        run_serial_validation_with_session(sample_plan(), &config, &mut BrokenSerial)
-            .expect("run is returned with the failure recorded");
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut BrokenSerial)
+        .expect("run is returned with the failure recorded");
 
     let outcome = run
         .outcomes
@@ -498,7 +497,10 @@ fn u_boot_serial_plan_runs_for_raspberry_pi_3_b_plus() {
         false,
     );
     let mut serial = FakeSerial::with_chunks(&["U-Boot 2026.04\n=> "]);
-    let plan = pi3_plan(ValidationExecutorKind::UBootSerial, Board::RaspberryPi3BPlus);
+    let plan = pi3_plan(
+        ValidationExecutorKind::UBootSerial,
+        Board::RaspberryPi3BPlus,
+    );
 
     let run = run_serial_validation_with_session(plan, &config, &mut serial).expect("run");
 
@@ -523,7 +525,11 @@ fn rockpro64_executor_is_rejected_for_other_boards() {
     let error = run_serial_validation_with_session(plan, &config, &mut serial)
         .expect_err("rockpro64 executor on a pi plan");
 
-    assert!(error.to_string().contains("only valid for the rockpro64 board"));
+    assert!(
+        error
+            .to_string()
+            .contains("only valid for the rockpro64 board")
+    );
 }
 
 #[test]

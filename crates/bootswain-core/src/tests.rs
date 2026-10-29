@@ -114,7 +114,10 @@ fn public_enum_wire_names_are_stable() {
             .expect("serialize u-boot-serial executor"),
         "\"u-boot-serial\""
     );
-    assert_eq!(ValidationExecutorKind::UBootSerial.to_string(), "u-boot-serial");
+    assert_eq!(
+        ValidationExecutorKind::UBootSerial.to_string(),
+        "u-boot-serial"
+    );
     assert_eq!(
         "usb-storage"
             .parse::<QemuDiskInterface>()
@@ -337,5 +340,8 @@ fn rockpro64_wire_name_matches_as_str_and_accepts_legacy_spelling() {
         let board: Board = serde_json::from_str(&format!("\"{name}\"")).expect("deserialize");
         assert_eq!(board, Board::RockPro64);
     }
-    assert_eq!(crate::AutobootResult::WarnEnumerate.to_string(), "warn+enumerate");
+    assert_eq!(
+        crate::AutobootResult::WarnEnumerate.to_string(),
+        "warn+enumerate"
+    );
 }

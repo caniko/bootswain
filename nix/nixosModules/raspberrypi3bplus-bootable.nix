@@ -1,7 +1,4 @@
-{self}: {
-  lib,
-  ...
-}: {
+{self}: {lib, ...}: {
   imports = [
     (import ./raspberrypi3bplus.nix {inherit self;})
   ];

@@ -220,10 +220,11 @@ fn artifact_payload_reader(plan: &FlashPlan) -> Result<Box<dyn Read>> {
     match plan.strategy {
         FlashStrategy::RawCopy => Ok(Box::new(input)),
         // Decoder::new buffers its input itself.
-        FlashStrategy::ZstdDecompress => Ok(Box::new(
-            Decoder::new(input)
-                .with_context(|| format!("failed to decode {}", plan.image.path.display()))?,
-        )),
+        FlashStrategy::ZstdDecompress => {
+            Ok(Box::new(Decoder::new(input).with_context(|| {
+                format!("failed to decode {}", plan.image.path.display())
+            })?))
+        }
     }
 }
 

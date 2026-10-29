@@ -101,7 +101,11 @@ where
         }
 
         if let Some(failed_scenario) = &stopped_after {
-            outcomes.push(stopped_after_failure_outcome(scenario, failed_scenario, executor));
+            outcomes.push(stopped_after_failure_outcome(
+                scenario,
+                failed_scenario,
+                executor,
+            ));
             continue;
         }
 

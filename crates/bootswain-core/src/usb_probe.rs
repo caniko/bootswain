@@ -114,7 +114,10 @@ impl SummaryResult {
     ) -> anyhow::Result<Self> {
         let total_trials =
             u32::try_from(trial_results.len()).context("trial count does not fit in u32")?;
-        let clean = trial_results.iter().filter(|trial| trial.is_clean()).count();
+        let clean = trial_results
+            .iter()
+            .filter(|trial| trial.is_clean())
+            .count();
         let clean_trials = u32::try_from(clean).context("clean trial count does not fit in u32")?;
         let failing_trials = total_trials.saturating_sub(clean_trials);
 

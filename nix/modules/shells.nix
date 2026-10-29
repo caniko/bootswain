@@ -5,8 +5,7 @@
   toolchain,
   treefmtWrapper,
   plinthProject,
-}:
-{
+}: {
   devShells =
     (harbor-rs.lib.mkDevShells {
       inherit pkgs cross;

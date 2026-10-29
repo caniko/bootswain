@@ -9,8 +9,7 @@
   raspberryPi3BPlusReleaseCandidate,
   rockpro64ExperimentalRelease,
   rockpro64ReleaseBundleExperimental,
-}:
-let
+}: let
   commonArgs = {
     inherit src;
     pname = "bootswain";
@@ -44,7 +43,7 @@ let
     }
   );
 
-  qemuArm64ToolingCheck = pkgs.runCommand "qemu-arm64-tooling-check" { } ''
+  qemuArm64ToolingCheck = pkgs.runCommand "qemu-arm64-tooling-check" {} ''
     mkdir -p "$out"
 
     ${pkgs.qemu}/bin/qemu-system-aarch64 --version > "$out/qemu-version.txt"
@@ -73,7 +72,7 @@ let
     fi
   '';
 
-  qemuArm64BootSmokeCheck = pkgs.runCommand "qemu-arm64-boot-smoke" { } ''
+  qemuArm64BootSmokeCheck = pkgs.runCommand "qemu-arm64-boot-smoke" {} ''
     mkdir -p "$out"
 
     ${bootswain}/bin/bootswain validate qemu-arm64 \
@@ -91,47 +90,44 @@ let
     grep -q 'U-Boot' "$out/serial.log"
   '';
 
-  rockpro64ExperimentalBundleCheck =
-    pkgs.runCommand "rockpro64-experimental-bundle-check" { } ''
-      mkdir -p "$out"
+  rockpro64ExperimentalBundleCheck = pkgs.runCommand "rockpro64-experimental-bundle-check" {} ''
+    mkdir -p "$out"
 
-      ${bootswain}/bin/bootswain firmware inspect \
-        --manifest ${rockpro64ReleaseBundleExperimental}/release.json \
-        > "$out/inspect.txt"
-      ${bootswain}/bin/bootswain firmware artifacts \
-        --manifest ${rockpro64ReleaseBundleExperimental}/release.json \
-        > "$out/artifacts.txt"
+    ${bootswain}/bin/bootswain firmware inspect \
+      --manifest ${rockpro64ReleaseBundleExperimental}/release.json \
+      > "$out/inspect.txt"
+    ${bootswain}/bin/bootswain firmware artifacts \
+      --manifest ${rockpro64ReleaseBundleExperimental}/release.json \
+      > "$out/artifacts.txt"
 
-      grep -q 'release: ${rockpro64ExperimentalRelease}' "$out/inspect.txt"
-      grep -q 'artifacts: 6' "$out/inspect.txt"
-      grep -q 'spi-installer: spi.installer.img' "$out/artifacts.txt"
-      grep -q 'flashable: yes' "$out/artifacts.txt"
-      grep -q 'u-boot-rockchip: u-boot-rockchip.bin' "$out/artifacts.txt"
-      grep -q 'u-boot-rockchip-spi: u-boot-rockchip-spi.bin' "$out/artifacts.txt"
-    '';
-  raspberryPi3BPlusBundleCheck =
-    pkgs.runCommand "raspberrypi3bplus-bundle-check" { } ''
-      mkdir -p "$out"
+    grep -q 'release: ${rockpro64ExperimentalRelease}' "$out/inspect.txt"
+    grep -q 'artifacts: 6' "$out/inspect.txt"
+    grep -q 'spi-installer: spi.installer.img' "$out/artifacts.txt"
+    grep -q 'flashable: yes' "$out/artifacts.txt"
+    grep -q 'u-boot-rockchip: u-boot-rockchip.bin' "$out/artifacts.txt"
+    grep -q 'u-boot-rockchip-spi: u-boot-rockchip-spi.bin' "$out/artifacts.txt"
+  '';
+  raspberryPi3BPlusBundleCheck = pkgs.runCommand "raspberrypi3bplus-bundle-check" {} ''
+    mkdir -p "$out"
 
-      ${bootswain}/bin/bootswain firmware inspect \
-        --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
-        > "$out/inspect.txt"
-      ${bootswain}/bin/bootswain firmware artifacts \
-        --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
-        > "$out/artifacts.txt"
+    ${bootswain}/bin/bootswain firmware inspect \
+      --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
+      > "$out/inspect.txt"
+    ${bootswain}/bin/bootswain firmware artifacts \
+      --manifest ${raspberryPi3BPlusReleaseBundle}/release.json \
+      > "$out/artifacts.txt"
 
-      grep -q 'release: ${raspberryPi3BPlusReleaseCandidate}' "$out/inspect.txt"
-      grep -q 'board: raspberry-pi-3-b-plus' "$out/inspect.txt"
-      grep -q 'trusted-firmware-a: not-applicable' "$out/inspect.txt"
-      grep -q 'spi-size-bytes: not-applicable' "$out/inspect.txt"
-      grep -q 'artifacts: 3' "$out/inspect.txt"
-      grep -q 'sd-card-image: sd-card.img' "$out/artifacts.txt"
-      grep -q 'raspberry-pi-firmware: raspberry-pi-firmware.tar' "$out/artifacts.txt"
-      grep -q 'u-boot-rpi3: u-boot-rpi3.bin' "$out/artifacts.txt"
-      grep -q 'flashable: yes' "$out/artifacts.txt"
-    '';
-in
-{
+    grep -q 'release: ${raspberryPi3BPlusReleaseCandidate}' "$out/inspect.txt"
+    grep -q 'board: raspberry-pi-3-b-plus' "$out/inspect.txt"
+    grep -q 'trusted-firmware-a: not-applicable' "$out/inspect.txt"
+    grep -q 'spi-size-bytes: not-applicable' "$out/inspect.txt"
+    grep -q 'artifacts: 3' "$out/inspect.txt"
+    grep -q 'sd-card-image: sd-card.img' "$out/artifacts.txt"
+    grep -q 'raspberry-pi-firmware: raspberry-pi-firmware.tar' "$out/artifacts.txt"
+    grep -q 'u-boot-rpi3: u-boot-rpi3.bin' "$out/artifacts.txt"
+    grep -q 'flashable: yes' "$out/artifacts.txt"
+  '';
+in {
   inherit bootswain;
 
   packages = {

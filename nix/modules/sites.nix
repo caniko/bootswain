@@ -1,4 +1,8 @@
-{pkgs, lib, root}: let
+{
+  pkgs,
+  lib,
+  root,
+}: let
   website = pkgs.stdenv.mkDerivation {
     pname = "bootswain-website";
     version = "0.1.0";
