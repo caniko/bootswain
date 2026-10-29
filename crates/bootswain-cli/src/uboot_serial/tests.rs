@@ -579,3 +579,19 @@ fn command_step_waits_for_board_specific_prompt() {
     assert!(serial_selected_outcomes_passed(&run));
     assert_eq!(serial.writes, vec!["bootflow scan\n"]);
 }
+
+#[test]
+fn failed_bootflow_does_not_end_the_scan() {
+    // Pi 3 B+ serial log: bootstd tries efi_mgr first, it fails, extlinux then boots.
+    let tmp = tempdir().expect("tempdir");
+    let config = sample_config(tmp.path().join("out"), vec!["bootflow".into()], false);
+    let mut serial = FakeSerial::with_chunks(&[
+        "=> ",
+        "** Booting bootflow '<NULL>' with efi_mgr\nBoot failed (err=-14)\n",
+        "** Booting bootflow 'mmc.part_2' with extlinux\nScanning for bootflows\n",
+    ]);
+
+    let run = run_serial_validation_with_session(sample_plan(), &config, &mut serial).expect("run");
+
+    assert!(serial_selected_outcomes_passed(&run));
+}

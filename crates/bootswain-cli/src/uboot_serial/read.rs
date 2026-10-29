@@ -51,7 +51,10 @@ impl ReadOutcome {
     }
 }
 
-const TERMINAL_FAILURE_MARKERS: [&str; 13] = [
+// Not "Boot failed (err=": bootstd prints it per bootflow and moves on (the Pi 3 B+
+// efi_mgr attempt fails before extlinux boots); scan exhaustion shows up as the
+// markers below or a return to the prompt.
+const TERMINAL_FAILURE_MARKERS: [&str; 12] = [
     "SPI probe failed",
     "SPI flash write failed",
     "SPI verify mismatch",
@@ -61,7 +64,6 @@ const TERMINAL_FAILURE_MARKERS: [&str; 13] = [
     "BootsWain installer media detected under installed firmware",
     "Failed to load SPI payload",
     "Unexpected board compatible",
-    "Boot failed (err=",
     "No more bootdevs",
     "No detected boot options",
     "No bootable media on",

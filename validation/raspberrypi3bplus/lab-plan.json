@@ -29,8 +29,8 @@
       "steps": [
         {
           "name": "print board model from the firmware DTB",
-          "command": "fdt addr ${fdt_addr}; fdt print /model",
-          "expect": ["Raspberry Pi 3 Model B+"],
+          "command": "fdt addr ${fdt_addr}; fdt print / model; fdt print / compatible",
+          "expect": ["Raspberry Pi 3 Model B Plus", "raspberrypi,3-model-b-plus"],
           "timeout_secs": 15
         }
       ]
@@ -44,7 +44,7 @@
       "steps": [
         {
           "name": "boot extlinux from sd",
-          "command": "bootflow scan -lb mmc0",
+          "command": "setenv boot_targets mmc; bootflow scan",
           "expect": ["Starting kernel"],
           "timeout_secs": 60
         },
@@ -65,7 +65,7 @@
       "steps": [
         {
           "name": "boot extlinux from usb",
-          "command": "usb start; bootflow scan -lb usb0",
+          "command": "setenv boot_targets usb; usb start; bootflow scan",
           "expect": ["Starting kernel"],
           "timeout_secs": 60
         },
