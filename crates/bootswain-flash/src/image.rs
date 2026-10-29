@@ -2,8 +2,9 @@ use anyhow::{Context, Result, bail};
 use bootswain_core::{CompressionKind, ImageInfo};
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
+use zstd::stream::read::Decoder;
 
 pub fn inspect_image(path: &Path) -> Result<ImageInfo> {
     let compression = detect_compression(path)?;
@@ -65,31 +66,22 @@ pub fn sha256_file(path: &Path) -> Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// Bytes a flash writes to the device: the image size, or for zstd the decoded size
-/// recorded in the first frame header.
+/// Bytes a flash writes to the device: the image size, or for zstd the number of bytes
+/// the decoder yields across all frames (the same stream flashing writes).
 pub fn payload_size_bytes(image: &ImageInfo) -> Result<u64> {
     if image.compression == CompressionKind::None {
         return Ok(image.size_bytes);
     }
 
-    // ZSTD_FRAMEHEADERSIZE_MAX is 18 bytes.
-    let mut header = Vec::with_capacity(18);
-    File::open(&image.path)
-        .and_then(|file| file.take(18).read_to_end(&mut header))
-        .with_context(|| format!("failed to read zstd header of {}", image.path.display()))?;
-    match zstd::zstd_safe::get_frame_content_size(&header) {
-        Ok(Some(size)) => Ok(size),
-        Ok(None) => bail!(
-            "{} does not record its decoded size, so device capacity cannot be checked; \
-             recompress with a known content size (zstd does this for file input) or flash \
-             through a manifest artifact that sets required_device_size_bytes",
-            image.path.display()
-        ),
-        Err(error) => bail!(
-            "{} has an unreadable zstd frame header: {error}",
-            image.path.display()
-        ),
-    }
+    // ponytail: the extra full decode pass is fine for firmware-sized images; sum frame
+    // headers instead if large images appear.
+    let mut reader = Decoder::new(
+        File::open(&image.path)
+            .with_context(|| format!("failed to open image {}", image.path.display()))?,
+    )
+    .with_context(|| format!("failed to decode {}", image.path.display()))?;
+    io::copy(&mut reader, &mut io::sink())
+        .with_context(|| format!("failed to decode {}", image.path.display()))
 }
 
 #[cfg(test)]
@@ -118,20 +110,13 @@ mod tests {
         );
     }
 
-    fn zstd_image(
-        path: &std::path::Path,
-        payload: &[u8],
-        pledge_size: bool,
-    ) -> bootswain_core::ImageInfo {
-        let mut encoder = zstd::stream::Encoder::new(fs::File::create(path).expect("create"), 0)
-            .expect("encoder");
-        if pledge_size {
-            encoder
-                .set_pledged_src_size(Some(payload.len() as u64))
-                .expect("pledge");
-        }
-        std::io::Write::write_all(&mut encoder, payload).expect("encode");
-        encoder.finish().expect("finish");
+    fn zstd_image(path: &std::path::Path, frames: &[&[u8]]) -> bootswain_core::ImageInfo {
+        // encode_all emits one complete frame per call; concatenated frames are valid zstd.
+        let bytes: Vec<u8> = frames
+            .iter()
+            .flat_map(|frame| zstd::encode_all(*frame, 0).expect("encode"))
+            .collect();
+        fs::write(path, bytes).expect("write zst");
         bootswain_core::ImageInfo {
             path: path.to_path_buf(),
             compression: CompressionKind::Zstd,
@@ -144,7 +129,7 @@ mod tests {
     fn zstd_payload_size_is_the_decoded_size() {
         let tmp = tempdir().expect("tempdir");
         let payload = vec![0_u8; 1 << 20];
-        let image = zstd_image(&tmp.path().join("a.img.zst"), &payload, true);
+        let image = zstd_image(&tmp.path().join("a.img.zst"), &[&payload]);
 
         // Highly compressible: the file is tiny, the payload is 1 MiB.
         assert!(image.size_bytes < 1024);
@@ -152,12 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn zstd_without_content_size_is_an_error() {
+    fn concatenated_zstd_frames_are_summed() {
         let tmp = tempdir().expect("tempdir");
-        let image = zstd_image(&tmp.path().join("b.img.zst"), b"bootswain", false);
+        let first = vec![0_u8; 1 << 20];
+        let second = vec![1_u8; 512 << 10];
+        let image = zstd_image(&tmp.path().join("c.img.zst"), &[&first, &second]);
 
-        let error = payload_size_bytes(&image).expect_err("unknown size");
-        assert!(error.to_string().contains("does not record its decoded size"));
+        assert_eq!(
+            payload_size_bytes(&image).expect("size"),
+            (1 << 20) + (512 << 10)
+        );
     }
 
     #[test]
