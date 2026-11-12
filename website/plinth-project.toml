@@ -1,12 +1,15 @@
 [site]
 title = "Bootswain"
-description = "A Rust workspace for repeatable host-side board flashing, firmware inspection, serial probing, and validation workflows around U-Boot."
+description = "Repeatable host-side board flashing, firmware inspection, serial probing, and U-Boot validation from one flake."
 base_url = "/"
-footer_note = "Generated from repository metadata by the plinth-project FOSS sweep."
 
 [[nav]]
 label = "Overview"
 href = "#overview"
+
+[[nav]]
+label = "Workflow"
+href = "#workflow"
 
 [[nav]]
 label = "Source"
@@ -19,7 +22,7 @@ href = "https://github.com/caniko/bootswain"
 [[pages]]
 slug = "index"
 title = "Bootswain"
-description = "A Rust workspace for repeatable host-side board flashing, firmware inspection, serial probing, and validation workflows around U-Boot."
+description = "Repeatable host-side board flashing, firmware inspection, serial probing, and U-Boot validation from one flake."
 
 [[pages.sections]]
 type = "hero"
@@ -28,9 +31,13 @@ tagline = "Evidence-gated firmware workflows for embedded boards."
 subtitle = "Inspect images, flash removable media, probe serial and USB paths, and validate ROCKPro64 and Raspberry Pi workflows with reproducible NixOS tooling."
 
 [[pages.sections.ctas]]
+label = "Get started"
+href = "#install"
+primary = true
+
+[[pages.sections.ctas]]
 label = "View source"
 href = "https://github.com/caniko/bootswain"
-primary = true
 
 [[pages.sections]]
 type = "feature_grid"
@@ -47,3 +54,45 @@ description = "Exercise ROCKPro64 USB and serial validation workflows, with Rasp
 [[pages.sections.features]]
 title = "Reproducible images"
 description = "Package board images and NixOS integrations from a repeatable workspace instead of relying on undocumented manual flashing steps."
+
+[[pages.sections]]
+type = "workflow_steps"
+id = "workflow"
+heading = "Inspect, flash, validate"
+intro = "Every step is a command from the repository, and the flash step can dry-run before it touches a device."
+
+[[pages.sections.steps]]
+title = "List the built targets"
+description = "nix run .#flash -- --list-targets prints the release-candidate images this flake can flash."
+
+[[pages.sections.steps]]
+title = "Inspect the artifact"
+description = "bootswain image inspect --image /path/to/spi.installer.img reads the image layout, including every zstd frame, before anything reaches a device."
+
+[[pages.sections.steps]]
+title = "Dry-run the flash"
+description = "nix run .#flash -- --target rockpro64-spi-installer --device /dev/sdX --dry-run runs the guard checks and shows what would be written."
+
+[[pages.sections.steps]]
+title = "Validate the boot"
+description = "bootswain validate qemu-arm64 --plan validation/qemu-arm64/boot-smoke.json --u-boot /path/to/u-boot.bin --qemu qemu-system-aarch64 --out ./qemu-output runs the scripted smoke plan and keeps its output."
+
+[[pages.sections]]
+type = "install"
+id = "install"
+heading = "Get started"
+intro = "The flake builds the CLI, the flash wrapper and the board images, so a checkout and a Nix installation are all you need."
+guide_href = "https://github.com/caniko/bootswain"
+
+[[pages.sections.primary_routes]]
+label = "Run from the flake"
+audience = "Nix, Linux host"
+command = "nix run .#flash -- --list-targets"
+href = "https://github.com/caniko/bootswain#quick-start"
+recommended = true
+
+[[pages.sections.secondary_routes]]
+label = "Development shell"
+audience = "Nix"
+command = "nix develop"
+href = "https://github.com/caniko/bootswain#development"
