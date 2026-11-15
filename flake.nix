@@ -7,7 +7,10 @@
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
-    treefmt-nix.follows = "harbor-rs/treefmt-nix";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     plinth = {
       url = "git+https://github.com/caniko/plinth.git?ref=trunk";
       inputs.nixpkgs.follows = "nixpkgs";
