@@ -42,6 +42,10 @@
     // {
       lib = {
         inherit mkPerSystem;
+        mkArmbianRockchip64Kernel = pkgs:
+          pkgs.callPackage ./nix/packages/armbian-rockchip64-kernel {
+            inherit (pkgs.buildPackages) dpkg fetchurl;
+          };
       };
 
       nixosModules = rec {

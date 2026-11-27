@@ -312,6 +312,9 @@ in {
     // {
       inherit website;
       site = website;
+    }
+    // lib.optionalAttrs (system == "aarch64-linux") {
+      armbian-rockchip64-kernel = self.lib.mkArmbianRockchip64Kernel pkgs;
     };
   apps =
     flash.apps
