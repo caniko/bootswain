@@ -1,12 +1,11 @@
 # ROCKPro64 Release Guide
 
-This procedure turns the Phase 0 contract into a release process for the
-ROCKPro64.
+Use this procedure to release ROCKPro64 firmware under the Phase 0 contract.
 
 ## Release Inputs
 
-The release is expected to be produced from a clean checkout with pinned board
-inputs. The published release bundle should include:
+Build from a clean checkout with pinned board inputs. The published bundle
+should include:
 
 - `spi.installer.img`
 - `shared.disk-image.img`
@@ -17,7 +16,7 @@ inputs. The published release bundle should include:
 - `release.json`
 - `release-notes.md`
 
-If images are compressed for distribution, publish the `.zst` versions and keep
+If you compress images for distribution, publish the `.zst` versions and keep
 the uncompressed names in the manifest.
 
 ## Build Procedure
@@ -25,8 +24,7 @@ the uncompressed names in the manifest.
 1. Start from a clean checkout in the repository's pinned build environment.
 2. Build the board release-candidate bundle and collect the artifacts listed above.
 3. Generate `sha256sums.txt` and `release.json` from the build outputs.
-4. Verify that the manifest records the source revisions and board inputs used
-   to produce the release.
+4. Verify the manifest records the release's source revisions and board inputs.
 5. Promote to stable only after importing hardware evidence and building
    `.#rockpro64-stable-release-bundle`.
 
@@ -36,12 +34,12 @@ the uncompressed names in the manifest.
 
 1. Write `spi.installer.img` to an SD card.
 2. Boot the ROCKPro64 from that SD card.
-3. In the firmware menu, choose the action that flashes firmware to SPI.
+3. Choose the firmware menu action that flashes firmware to SPI.
 4. Remove the SD card after success.
 5. Reboot and verify the board starts from SPI without installer media.
 
-If the release uses a host-side write step for installer media,
-`bootswain flash sd` remains the documented host tool for that job.
+If the release calls for writing installer media from a host, use
+`bootswain flash sd`.
 
 ### Shared Storage
 
@@ -50,8 +48,8 @@ If the release uses a host-side write step for installer media,
 3. Verify the firmware discovers and boots installed systems from the protected
    firmware partition or reserved span on that device.
 
-The shared-storage path is not a direct SPI replacement. It is a discrete
-firmware image placed on removable or internal mass storage.
+Shared storage puts a discrete firmware image on removable or internal mass
+storage; it does not directly replace SPI.
 
 ## Validation Procedure
 
@@ -66,9 +64,8 @@ The release validation set covers:
 - boot an extlinux-based image from supported media
 - capture serial logs for every trial
 
-If the release claims USB, SD, eMMC, or NVMe support, those paths must appear in
-the release validation table. If they are not in the table, they are not
-claimed.
+List each claimed USB, SD, eMMC, or NVMe path in the release validation table.
+Paths absent from the table are unclaimed.
 
 ## Operator Checks
 

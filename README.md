@@ -6,20 +6,19 @@
 
 <!-- simit:badges:end -->
 
-`bootswain` is a Rust workspace for repeatable host-side board flashing,
-firmware inspection, serial probing, and validation workflows around U-Boot.
-The current focus is ROCKPro64 firmware work, with hardware-validated Raspberry Pi 3 B+
-SD card firmware (stable evidence under `validation/raspberrypi3bplus/stable/`) and
-best-effort Pi 3 family firmware.
+`bootswain` is a Rust workspace for repeatable host-side flashing, firmware
+inspection, serial probing, and U-Boot validation. It focuses on ROCKPro64
+firmware, with hardware-validated Raspberry Pi 3 B+ SD card firmware (stable
+evidence under `validation/raspberrypi3bplus/stable/`) and best-effort Pi 3
+family firmware.
 
-Pi 5 U-Boot UEFI and ROCK 5A EDK2 release-candidate artifacts are also available,
-with a board-bound read-only Linux platform probe. See
-[UEFI appliances](docs/src/uefi-appliances.md) for outputs, installation boundaries,
-firmware versions, and the remaining physical qualification gates.
+Bootswain also offers Pi 5 U-Boot UEFI and ROCK 5A EDK2 release candidates with
+a board-bound, read-only Linux platform probe. See
+[UEFI appliances](docs/src/uefi-appliances.md) for outputs, installation limits,
+firmware versions, and remaining hardware checks.
 
-The project is intentionally evidence-gated: release-candidate artifacts are
-easy to build and inspect, but stable support claims require real validation
-data under `validation/<board>/stable/`.
+Release candidates are easy to build and inspect. Stable support requires real
+validation data under `validation/<board>/stable/`.
 
 ## What It Does
 
@@ -34,13 +33,12 @@ data under `validation/<board>/stable/`.
 
 ## Status
 
-ROCKPro64 is the primary target. The SPI installer target is flashable as a
-release candidate; shared-storage image flashing remains gated unless the
-operator explicitly allows non-flashable artifacts for lab work.
+ROCKPro64 is the primary target. The SPI installer is a flashable release
+candidate. To flash a shared-storage image for lab work, explicitly allow
+non-flashable artifacts.
 
-Raspberry Pi 3 B+ support currently produces a release-candidate MBR SD card
-image. It does not claim stable support until validation evidence is imported
-under `validation/raspberrypi3bplus/stable/`.
+The Raspberry Pi 3 B+ MBR SD card image is a release candidate. Stable support
+requires importing validation evidence under `validation/raspberrypi3bplus/stable/`.
 
 ## Quick Start
 
@@ -147,8 +145,8 @@ Common outputs include:
 
 ## NixOS Integration
 
-Downstream flakes can import a bootable profile and layer their own filesystems,
-users, services, and deployment policy on top:
+Downstream flakes can import a bootable profile and add their own filesystems,
+users, services, and deployment policy:
 
 ```nix
 {
@@ -180,9 +178,9 @@ users, services, and deployment policy on top:
 
 ## Validation Evidence
 
-Stable promotion is blocked until the relevant board directory contains real
-lab evidence, including the validation run, serial logs, artifact manifest, and
-exact image checksums.
+Before promoting a board to stable, put real lab evidence in its board
+directory: the validation run, serial logs, artifact manifest, and exact image
+checksums.
 
 For ROCKPro64, stable promotion requires:
 
@@ -190,10 +188,11 @@ For ROCKPro64, stable promotion requires:
 - serial logs for every claimed scenario
 - a successful build of `.#rockpro64-stable-release-bundle`
 
-For Raspberry Pi 3 B+, stable promotion requires equivalent evidence (scenarios
-`serial-u-boot-prompt`, `family-dtb-check`, `sd-extlinux-boot`, all in one run on an OS image rather than the firmware-only `sd-card.img`) and a successful build of
-`.#raspberrypi3bplus-stable-release-bundle`. See
-[the lab runbook](docs/src/raspberrypi3bplus/lab-runbook.md). Evidence lives under:
+Raspberry Pi 3 B+ needs equivalent evidence and a successful build of
+`.#raspberrypi3bplus-stable-release-bundle`. Pass `serial-u-boot-prompt`,
+`family-dtb-check`, and `sd-extlinux-boot` in one run on an OS image, not the
+firmware-only `sd-card.img`. Follow [the lab runbook](docs/src/raspberrypi3bplus/lab-runbook.md)
+and store evidence under:
 
 ```text
 validation/raspberrypi3bplus/stable/
@@ -201,10 +200,8 @@ validation/raspberrypi3bplus/stable/
 
 ## Development
 
-The repository uses Nix for repeatable tooling. CI qualification runs in the
-`caniko/fleet` superproject; only the Pages workflow lives here.
-
-Useful local commands:
+Nix provides repeatable tooling. CI qualification runs in the `caniko/fleet`
+superproject; only the Pages workflow lives here.
 
 ```sh
 nix develop
@@ -214,14 +211,14 @@ cargo test --workspace
 nix flake check --no-build
 ```
 
-Documentation lives in `docs/` and can be served with:
+Serve the docs from `docs/`:
 
 ```sh
 cd docs
 mdbook serve
 ```
 
-The website lives in `website/` and can be served with:
+Serve the site from `website/`:
 
 ```sh
 cd website
