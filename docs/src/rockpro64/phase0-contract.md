@@ -1,9 +1,7 @@
 # ROCKPro64 Phase 0 Contract
 
-This is the first release contract for a ROCKPro64 Tow-Boot replacement. It is
-intentionally narrow: the goal is a board-specific firmware release with
-explicit artifacts, layout rules, boot order, environment policy, and validation
-claims.
+This first release contract for a ROCKPro64 Tow-Boot replacement defines the
+board's firmware artifacts, layout, boot order, environment, and validation claims.
 
 ## Scope
 
@@ -20,8 +18,6 @@ unrelated to ROCKPro64 booting and installation.
 
 ## Artifact Set
 
-Release outputs use these artifact names:
-
 - `spi.installer.img`
 - `shared.disk-image.img`
 - `idbloader.img`
@@ -30,9 +26,8 @@ Release outputs use these artifact names:
 - `sha256sums.txt`
 - `release.json`
 
-Compressed release assets may additionally be published as `.zst` variants, but
-the base names above are the contract. The end-user images are the installer
-image and the shared-storage image.
+Releases may also publish `.zst` variants; the base names above are the
+contract. The installer and shared-storage images are for end users.
 
 ## Storage and Boot Policy
 
@@ -51,7 +46,7 @@ The firmware scan order is:
 3. USB mass storage
 4. NVMe, if the build and board support it
 
-UEFI boot is the preferred generic distro path, with extlinux as the fallback.
+For generic distros, prefer UEFI and fall back to extlinux.
 On the tested ROCKPro64 v2.1, U-Boot enumerates eMMC as `mmc0` and SD as
 `mmc1`. See [Operator Notes](./operator-notes.md) for the serial checks used to
 verify the mapping.
@@ -59,21 +54,20 @@ verify the mapping.
 ## Environment Policy
 
 Phase 0 does not rely on user-customized persistent environment state.
+Deterministic boot takes priority over ad hoc environment edits.
 
 - The installer image must ignore stale saved environment data.
 - A fresh install must boot correctly with factory defaults.
-- Persistent environment is disabled for this milestone.
-- Shared-storage images must not allow ordinary OS activity to corrupt firmware
-  boot policy through a writable environment block.
-
-Deterministic booting matters more than preserving ad hoc environment edits.
+- Phase 0 disables the persistent environment.
+- Shared-storage images must prevent ordinary OS activity from corrupting
+  firmware boot policy through a writable environment block.
 
 ## Validation Claims
 
-A Phase 0 release may only claim paths that were exercised on hardware. Release
-notes must name the tested combinations explicitly.
+Claim only paths tested on hardware. Name the exact combinations in the
+release notes.
 
-At minimum, the release must distinguish between:
+Distinguish at least these cases:
 
 - build success from a clean checkout
 - SD installer boot
@@ -82,5 +76,4 @@ At minimum, the release must distinguish between:
 - UEFI and extlinux boot paths, if claimed
 - serial recovery
 
-Any path not validated in the release notes is unclaimed, even if it is
-plausible.
+Paths not validated in the release notes are unclaimed, even if plausible.

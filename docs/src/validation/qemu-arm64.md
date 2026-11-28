@@ -1,40 +1,37 @@
 # Generic ARM64 QEMU Validation
 
-`bootswain validate qemu-arm64` is a host-side smoke runner for generic ARM64
-U-Boot behavior under QEMU `virt`. It is not a ROCKPro64 emulator and must not
-be used as evidence for RK3399 SPL/TPL/TF-A, SPI flash, eMMC wiring, PCIe, or
-board-specific boot behavior.
+`bootswain validate qemu-arm64` smoke-tests generic ARM64 U-Boot from the host
+under QEMU `virt`. It does not emulate ROCKPro64. Do not use it as evidence for
+RK3399 SPL/TPL/TF-A, SPI flash, eMMC wiring, PCIe, or board-specific boot behavior.
 
 Local baseline:
 
 - QEMU binary: `qemu-system-aarch64`
 - Machine: `virt`
-- Useful synthetic storage devices: virtio block, USB storage, and NVMe
-- Unsupported by this workflow: `rockpro64` or `rk3399` machine models
+- Synthetic storage: virtio block, USB storage, and NVMe
+- Machine models unsupported by this workflow: `rockpro64` and `rk3399`
 
 ## Fixtures
 
-The generic validation fixture is:
+Generic validation:
 
 ```sh
 validation/qemu-arm64/generic-smoke.json
 ```
 
-The CI-safe boot fixture is:
+CI-safe boot:
 
 ```sh
 validation/qemu-arm64/boot-smoke.json
 ```
 
-`boot-smoke.json` only waits for a U-Boot prompt and is used by the Nix
-`qemu-arm64-boot-smoke` check. `generic-smoke.json` covers prompt detection,
-boot menu scripting, `bootflow scan`, and synthetic storage discovery for manual
-QEMU exercises.
+The Nix `qemu-arm64-boot-smoke` check uses `boot-smoke.json` to wait only for a
+U-Boot prompt. For manual QEMU runs, `generic-smoke.json` covers prompt detection,
+boot menu scripting, `bootflow scan`, and synthetic storage discovery.
 
 ## Dry Run
 
-Use dry-run mode to verify command construction and JSON output without starting
-QEMU:
+Check command construction and JSON output without starting QEMU:
 
 ```sh
 bootswain validate qemu-arm64 \
@@ -52,7 +49,7 @@ Dry run writes:
 - `serial.log`
 - `qemu-stderr.log`
 
-Each scenario is reported as `not-run`.
+Dry run reports each scenario as `not-run`.
 
 ## Execution
 
@@ -79,6 +76,6 @@ bootswain validate qemu-arm64 \
 
 Supported `--disk-interface` values are `virtio`, `usb-storage`, and `nvme`.
 
-Passing QEMU validation means only that generic ARM64 U-Boot command handling,
-serial log capture, timeout handling, and bootswain validation reporting work.
-ROCKPro64 support still requires a hardware validation run.
+A QEMU pass covers only generic ARM64 U-Boot command handling, serial log
+capture, timeout handling, and Bootswain validation reporting. ROCKPro64
+support still requires a hardware validation run.

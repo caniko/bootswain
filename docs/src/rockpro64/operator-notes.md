@@ -1,20 +1,17 @@
 # ROCKPro64 Operator Notes
 
-These notes capture hardware findings from hands-on ROCKPro64 bring-up with
-bootswain SPI firmware and a downstream NixOS install.
+Hardware findings from ROCKPro64 bring-up with bootswain SPI firmware and a
+downstream NixOS install.
 
 ## MMC Numbering
 
-On the tested ROCKPro64 v2.1 with U-Boot 2026.04, U-Boot enumerated the useful
-MMC devices as:
+U-Boot 2026.04 enumerated MMC devices on the tested ROCKPro64 v2.1 as follows:
 
 - `mmc0`: eMMC controller at `mmc@fe330000`
 - `mmc1`: SD controller at `mmc@fe320000`
 
-A serial check made the mapping visible: `mmc dev 1; mmc part` showed a single
-partition named `disk-sdcard-storage`, which matched the downstream SD-card
-backing partition, not the eMMC layout. The firmware mapping must therefore
-use:
+Over serial, `mmc dev 1; mmc part` showed only `disk-sdcard-storage`, the
+downstream SD-card backing partition, not the eMMC layout. Use this mapping:
 
 ```text
 bootswain_boot_target_emmc=mmc0
@@ -22,7 +19,7 @@ bootswain_boot_target_sd=mmc1
 boot_targets=mmc0 mmc1 usb0 nvme0 pxe dhcp
 ```
 
-When diagnosing a board, confirm with:
+Confirm the mapping when diagnosing a board:
 
 ```text
 mmc dev 0
@@ -52,16 +49,14 @@ or let U-Boot scan and boot the first valid eMMC flow:
 bootflow scan -lb mmc0
 ```
 
-The diagnostic command `bootflow scan -ale <label>` lists failed methods and
-partitions. The boot command `bootflow scan -lb <label>` is what the firmware
-menu should use for actual boot attempts.
+`bootflow scan -ale <label>` lists failed methods and partitions. Use
+`bootflow scan -lb <label>` for firmware menu boot attempts.
 
-A `bootflow scan -b` command may return to the script after listing zero valid
-flows, even when `/EFI/BOOT/BOOTAA64.EFI` is present and direct `bootefi` works.
-If control returns to bootswain after a booting scan, treat that path as not
-booted and continue fallback or return to the menu. The installed NixOS handoff
-therefore attempts bootflow first, then directly loads the removable EFI binary
-from the known ESP partition and runs `bootefi`.
+`bootflow scan -b` may return to the script with zero valid flows even when
+`/EFI/BOOT/BOOTAA64.EFI` exists and direct `bootefi` works. If a booting scan
+returns to bootswain, treat that path as not booted: continue fallback or return
+to the menu. The installed NixOS handoff tries bootflow first, then loads the
+removable EFI binary from the known ESP partition and runs `bootefi`.
 
 ## One-Shot USB Boot
 
@@ -85,7 +80,7 @@ boot loop.
 
 ## EFI vs Extlinux
 
-U-Boot can support both EFI and extlinux boot methods at the firmware level.
+U-Boot firmware can support both EFI and extlinux.
 NixOS normally expects exactly one bootloader installer for a system closure.
 
 - Use `boot.loader.systemd-boot.enable = true` when the target has a mounted
@@ -108,8 +103,8 @@ extlinux bootflow.
 
 ## Useful Serial Checks
 
-At a U-Boot prompt, these commands quickly distinguish mapping, filesystem, and
-boot method problems:
+Run these at the U-Boot prompt to isolate mapping, filesystem, or boot method
+problems:
 
 ```text
 mmc list
@@ -128,6 +123,6 @@ If the partition table shown for the supposed eMMC contains only
 
 ## SPI Firmware Update Reminder
 
-Local NixOS changes do not change already-installed SPI firmware. After fixing
+Local NixOS changes leave installed SPI firmware untouched. After fixing
 bootswain's firmware scripts or MMC mapping, rebuild the SPI firmware bundle
-and reflash SPI before expecting the default boot menu to use the new mapping.
+and reflash SPI so the default boot menu uses the new mapping.

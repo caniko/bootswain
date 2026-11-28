@@ -1,8 +1,8 @@
 # Pi 5 and ROCK 5A UEFI artifacts
 
 BootsWain packages Pi 5 U-Boot **v2026.07**, Raspberry Pi firmware/DTBs
-**1.20260915**, and ROCK 5A EDK2 **v1.1** with fixed source hashes. Both board
-identities are distinct from Pi 3 B+ and ROCKPro64.
+**1.20260915**, and ROCK 5A EDK2 **v1.1**, all with fixed source hashes. Pi 5,
+ROCK 5A, Pi 3 B+, and ROCKPro64 have distinct board identities.
 
 | Output | Contents |
 | --- | --- |
@@ -14,34 +14,33 @@ identities are distinct from Pi 3 B+ and ROCKPro64.
 | `.#rock5a-release-bundle` | Image, typed release manifest, sizes and SHA-256 checksums |
 
 The Pi build asserts `EFI_LOADER`, `EFI_VARIABLE_FILE_STORE`, `FAT_WRITE`,
-`FAT_RENAME`, and `BOOTMETH_EFILOADER` in the resulting configuration. The
+`FAT_RENAME`, and `BOOTMETH_EFILOADER` in its final configuration. The
 `uefi-artifacts` Nix check validates the images, both silicon revisions, manifest
 bounds, and checksums. Rust tests exercise board names and read-only probing.
-This evidence verifies packaging; actual board EFI handoff remains unmeasured.
+These checks verify packaging. EFI handoff on hardware remains unmeasured.
 
 ## Inspection and initial lab installation
 
-Inspect the bundle before using the ordinary BootsWain flasher:
+Inspect the bundle before flashing with BootsWain:
 
 ```sh
 bootswain firmware inspect --manifest /path/to/bundle/release.json --json
 bootswain firmware artifacts --manifest /path/to/bundle/release.json --json
 ```
 
-The `.#flash` wrapper exposes `pi5-boot-partition` and `rock5a-uefi`. These
-release-candidate artifacts retain `flashable: false`; explicit lab use selects
-`--allow-non-flashable`. The Pi image is a standalone FAT filesystem image,
-not a partitioned OS installer. Flash it only onto dedicated, unmounted firmware
-media; install the OS/ESP separately. The raw flasher's existing whole-device
-checks and byte verification remain in force. It is unsuitable for updating an
-occupied disk's firmware partition. Neither wrapper mutates a live SPI/EEPROM
-device or performs automatic firmware activation.
+The `.#flash` targets `pi5-boot-partition` and `rock5a-uefi` are release
+candidates marked `flashable: false`; use `--allow-non-flashable` only in the
+lab. The Pi image is a standalone FAT filesystem, not a partitioned OS
+installer. Flash it only to dedicated, unmounted firmware media; install the
+OS/ESP separately. The raw flasher still checks the whole device and verifies
+bytes. Do not use it to update a firmware partition on an occupied disk.
+Neither wrapper writes to live SPI/EEPROM or activates firmware automatically.
 
-The Pi EEPROM must already support the board/media setup. Keep a recorded EEPROM
-version and compatible rescue media. Booting Pi 5 does not require Pi 3's
-`start.elf` on the FAT filesystem.
+The Pi EEPROM must already support the board/media setup. Record its version
+and keep compatible rescue media. Pi 5 boots without Pi 3's `start.elf` on the
+FAT filesystem.
 
-For ROCK 5A, the upstream image provides Rockchip startup firmware and EDK2. Use
+The upstream ROCK 5A image supplies Rockchip startup firmware and EDK2. Use
 **Device Tree / Mainline** Linux mode. Preserve the upstream reserved firmware
 region; place OS partitions at or beyond 16 MiB. The variable region
 `0x7c0000..0x7effff` is excluded from the firmware image and must survive later
@@ -56,24 +55,24 @@ bootswain probe platform --expected-board pi5
 bootswain probe platform --expected-board rock5a
 ```
 
-The JSON result binds the expected board to the device-tree compatible strings,
-records kernel release and EFI/efivars visibility, and explicitly leaves runtime
-variable writes, boot counting, watchdog reset, and external rescue as
-`not-measured`. `--sys-root` and `--proc-root` support captured fixtures; those
-fixtures are not physical qualification. Pi 5 probing rejects Compute Module 5.
+The JSON result binds the expected board to the device-tree compatible strings
+and records kernel release and EFI/efivars visibility. Runtime variable writes,
+boot counting, watchdog reset, and external rescue remain `not-measured`.
+`--sys-root` and `--proc-root` support captured fixtures, not physical
+qualification. Pi 5 probing rejects Compute Module 5.
 
-U-Boot's file-backed EFI variables persist writes made during firmware execution.
-It does **not** provide persistent runtime `SetVariable` writes from Linux; an
-`efivars` directory alone cannot prove that capability. A downstream counted
-systemd-boot design must support readiness-bound file blessing and a selection
-mechanism that does not depend on unavailable runtime variable writes. ROCK 5A's
-shared SD/eMMC variable access also needs verification on the actual arrangement.
+U-Boot's file-backed EFI variables persist firmware-time writes, **not** Linux
+runtime `SetVariable` writes. An `efivars` directory alone cannot prove runtime
+persistence. Downstream systemd-boot counting needs readiness-bound file
+blessing and boot selection that works without runtime variable writes. Verify
+ROCK 5A's shared SD/eMMC variable access on the actual setup.
 
-Before target qualification, record EFI handoff to the intended kernel, ESP/storage
-layout, boot-count exhaustion and fallback, readiness blessing, watchdog handoff,
-interrupted installation/update and power cuts, and external rescue boot with
-state retention. Recovery before functioning firmware/networking needs independent
-power/serial access. Application and OS trials must be coordinated by the consumer.
+Before qualifying a target, record EFI handoff to the intended kernel,
+ESP/storage layout, boot-count exhaustion and fallback, readiness blessing,
+watchdog handoff, interrupted installation/update and power cuts, and external
+rescue boot with state retention. Recovery before firmware/networking works
+requires independent power/serial access. The consumer must coordinate
+application and OS trials.
 
 ## Sources
 
